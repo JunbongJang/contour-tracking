@@ -22,9 +22,9 @@ dist/
 **/assets/*
 **/generated/*
 **/misc/generated_mask_edge_on_image/*
-*.png
-*.mp4
-*.mov
-*.avi
-*.jpeg
-*.tif
+**/*.png
+**/*.mp4
+**/*.mov
+**/*.avi
+**/*.jpeg
+**/*.tif
