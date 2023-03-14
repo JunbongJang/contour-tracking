@@ -1,8 +1,8 @@
 # Compiled python modules.
-*.pyc
+**/*.pyc
 
 # Byte-compiled
-_pycache__/
+**/_pycache__
 .cache/
 
 # Python egg metadata, regenerated from source files by setuptools.
@@ -22,9 +22,9 @@ dist/
 **/assets/*
 **/generated/*
 **/misc/generated_mask_edge_on_image/*
-**/*.png
-**/*.mp4
-**/*.mov
-**/*.avi
-**/*.jpeg
-**/*.tif
+src/*.png
+src/*.mp4
+src/*.mov
+src/*.avi
+src/*.jpeg
+src/*.tif
