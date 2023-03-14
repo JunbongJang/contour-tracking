@@ -1,9 +1,23 @@
 # Contour tracking
+### [Project Page](https://junbongjang.github.io/projects/contour-tracking/index.html) | [Paper]() | [Data]()
+
+Tensorflow implementation of contour tracking of live cell and jellyfish videos.<br><br>
+[Unsupervised Contour Tracking of Live Cells by Mechanical and Cycle Consistency Losses](https://junbongjang.github.io/projects/contour-tracking/index.html)  
+ [Junbong Jang](https://junbongjang.github.io/)\*<sup>1</sup>,
+ [Kwonmoo Lee](https://research.childrenshospital.org/kwonmoo-lee)\*<sup>2,3</sup>,
+ [Tae-Kyun Kim](https://sites.google.com/view/tkkim/home)\*<sup>1,4</sup>
+ <br /><sup>1</sup>KAIST, <sup>2</sup>Boston Children's Hospital, <sup>3</sup>Harvard Medical School, <sup>4</sup>Imperial College London
+ <br />*denotes corresponding authors
+ <br />Accepted to CVPR 2023
+
+<img width="700" src='architecture.png' alt="architecture"/>
+
 
 ## Setup
 We ran this code in the following setting.
-* Python 3.8
+* Python 3.6.9
 * Tensorflow 2.4.3
+* CUDA 11.0
 * Ubuntu 18.04
 
 ## Installation
@@ -13,7 +27,7 @@ Build and run Docker using our Dockerfile.
 
     >sudo docker run -v /home/junbong/contour-tracking:/home/docker/contour-tracking -v /data/junbong/optical_flow/generated_3_5_2023:/data/junbong/optical_flow/generated_3_5_2023 -v /data/junbong/optical_flow/assets:/data/junbong/optical_flow/assets --gpus '"device=0"' -it tf24_contour_tracking
 
-Set up requirements
+Install Python dependencies in the requirements.txt
 >./run.sh
 
 ## Data Download

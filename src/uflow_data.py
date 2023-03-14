@@ -28,8 +28,6 @@ import tensorflow as tf
 
 from src import uflow_augmentation
 from src.data import generic_flow_dataset as flow_dataset
-from src.data import kitti
-from src.data import sintel
 
 # pylint:disable=g-long-lambda
 
@@ -68,7 +66,7 @@ def make_train_iterator(
     apply_augmentation: bool, indicates if geometric and photometric data
       augmentation shall be activated (paramaters are gin configurable)
     include_ground_truth: bool, if True, return ground truth optical flow with
-      the training images. This only exists for some datasets (Kitti, Sintel).
+      the training images. This only exists for some datasets.
     resize_gt_flow: bool, indicates if ground truth flow should be resized (only
       important if resizing and supervised training is used)
     include_occlusions: bool, indicates if ground truth occlusions should be
@@ -102,30 +100,16 @@ def make_train_iterator(
     if include_ground_truth:
       mode += '-supervised'
 
-    if include_occlusions and 'sintel' not in data_format:
-      raise ValueError('The parameter include_occlusions is only supported for'
-                       'sintel data.')
+    if include_occlusions:
+      raise ValueError('The parameter include_occlusions is not supported')
 
-    if include_ground_truth and ('chairs' not in data_format and
-                                 'sintel' not in data_format and
-                                 'kitti' not in data_format):
+    if include_ground_truth and ('chairs' not in data_format):
       raise NotImplementedError('The parameter include_ground_truth is only'
-                                'supported for flying_chairs, sintel, kitti and'
+                                'supported for flying_chairs and'
                                 'wod data at the moment.')
 
     # Add a dataset based on format and path.
-    if 'kitti' in data_format:
-      dataset = kitti.make_dataset(
-          path,
-          mode=mode,
-          seq_len=seq_len,
-          shuffle_buffer_size=shuffle_buffer_size,
-          height=None if crop_instead_of_resize else height,
-          width=None if crop_instead_of_resize else width,
-          resize_gt_flow=resize_gt_flow,
-          seed=seed,
-      )
-    elif 'chairs' in data_format:
+    if 'chairs' in data_format:
       dataset = flow_dataset.make_dataset(
           path,
           mode=mode,
@@ -134,17 +118,6 @@ def make_train_iterator(
           width=None if crop_instead_of_resize else width,
           resize_gt_flow=resize_gt_flow,
           gt_flow_shape=[384, 512, 2],
-          seed=seed,
-      )
-    elif 'sintel' in data_format:
-      dataset = sintel.make_dataset(
-          path,
-          mode=mode,
-          seq_len=seq_len,
-          shuffle_buffer_size=shuffle_buffer_size,
-          height=None if crop_instead_of_resize else height,
-          width=None if crop_instead_of_resize else width,
-          resize_gt_flow=resize_gt_flow,
           seed=seed,
       )
     else:  # custom dataset
@@ -259,96 +232,12 @@ def make_train_iterator(
   return train_it
 
 
-# def make_eval_function(eval_on, height, width, progress_bar, plot_dir,
-#                        num_plots):
-#   """Build an evaluation function for uflow.
-#
-#   Args:
-#     eval_on: string of the format 'format0:path0;format1:path1', e.g.
-#        'kitti:/usr/local/home/...'.
-#     height: int, the height to which the images should be resized for inference.
-#     width: int, the width to which the images should be resized for inference.
-#     progress_bar: boolean, flag to indicate whether the function should print a
-#       progress_bar during evaluaton.
-#     plot_dir: string, optional path to a directory in which plots are saved (if
-#       num_plots > 0).
-#     num_plots: int, maximum number of qualitative results to plot for the
-#       evaluation.
-#   Returns:
-#     A pair consisting of an evaluation function and a list of strings
-#       that holds the keys of the evaluation result.
-#   """
-#   eval_functions_and_datasets = []
-#   eval_keys = []
-#   # Split strings according to pattern "format0:path0;format1:path1".
-#   for format_and_path in eval_on.split(';'):
-#     data_format, path = format_and_path.split(':')
-#     print('make_eval_function')
-#     print('data_format:', data_format, '  path: ', path)
-#
-#     # Add a dataset based on format and path.
-#     if 'kitti' in data_format:
-#       if 'benchmark' in data_format:
-#         dataset = kitti.make_dataset(path, mode='test')
-#         eval_fn = kitti.benchmark
-#       else:
-#         dataset = kitti.make_dataset(path, mode='eval')
-#         eval_fn = partial(kitti.evaluate, prefix=data_format)
-#         eval_keys += kitti.list_eval_keys(prefix=data_format)
-#
-#     if 'custom' in data_format:
-#       dataset = flow_dataset.make_dataset(path, mode='eval')
-#       eval_fn = partial(
-#           flow_dataset.evaluate,
-#           prefix=data_format,
-#           max_num_evals=1000,  # We do this to avoid evaluating on 22k samples.
-#           has_occlusion=False)
-#       eval_keys += flow_dataset.list_eval_keys(prefix=data_format)
-#
-#     elif 'sintel' in data_format:
-#       if 'benchmark' in data_format:
-#         # pylint:disable=g-long-lambda
-#         # pylint:disable=cell-var-from-loop
-#         eval_fn = lambda uflow: sintel.benchmark(inference_fn=uflow.infer,
-#                                                  height=height, width=width,
-#                                                  sintel_path=path,
-#                                                  plot_dir=plot_dir,
-#                                                  num_plots=num_plots)
-#         if len(eval_on.split(';')) != 1:
-#           raise ValueError('Sintel benchmark should be done in isolation.')
-#         return eval_fn, []
-#       dataset = sintel.make_dataset(path, mode='eval-occlusion')
-#       eval_fn = partial(sintel.evaluate, prefix=data_format)
-#       eval_keys += sintel.list_eval_keys(prefix=data_format)\
-#
-#     else:
-#       print('Unknown data format "{}"'.format(data_format))
-#       continue
-#
-#     dataset = dataset.prefetch(4)
-#     eval_functions_and_datasets.append((eval_fn, dataset))
-#
-#   # Make an eval function that aggregates all evaluations.
-#   def eval_function(uflow):
-#     result = dict()
-#     for eval_fn, ds in eval_functions_and_datasets:
-#       results = eval_fn(
-#           uflow.infer, ds, height,
-#           width, progress_bar, plot_dir, num_plots)
-#       for k, v in results.items():
-#         result[k] = v
-#     return result
-#
-#   return eval_function, eval_keys
-
-
 def make_predict_function(predict_on, height, width, progress_bar, plot_dir,
                        num_plots, include_segmentations, include_seg_points, include_tracking_points, evaluate_bool):
   """Build predict function for uflow.
 
   Args:
-    predict_on: string of the format 'format0:path0;format1:path1', e.g.
-       'kitti:/usr/local/home/...'.
+    predict_on: string of the format 'format0:path0;format1:path1',
     height: int, the height to which the images should be resized for inference.
     width: int, the width to which the images should be resized for inference.
     progress_bar: boolean, flag to indicate whether the function should print a
@@ -379,20 +268,12 @@ def make_predict_function(predict_on, height, width, progress_bar, plot_dir,
     data_format, path = format_and_path.split(':')
 
     # Add a dataset based on format and path.
-    if 'kitti' in data_format:
-      dataset = kitti.make_dataset(path, mode=mode, height=height, width=width)
-      predict_fn = partial(kitti.predict, prefix=data_format)
-
-    elif 'chairs' in data_format or 'custom' in data_format:
+    if 'chairs' in data_format or 'custom' in data_format:
       dataset = flow_dataset.make_dataset(path, mode=mode, height=height, width=width)
 
       predict_fn = partial(
           flow_dataset.predict,
           evaluate_bool=evaluate_bool)
-
-    elif 'sintel' in data_format:
-      dataset = sintel.make_dataset(path, mode=mode, height=height, width=width)
-      predict_fn = partial(sintel.predict, prefix=data_format)
 
     else:
       print('Unknown data format "{}"'.format(data_format))
