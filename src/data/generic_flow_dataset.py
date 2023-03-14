@@ -20,9 +20,9 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from uflow.data import data_utils
+from src.data import data_utils
 # pylint:disable=unused-import
-from uflow.data.data_utils import predict, list_eval_keys
+from src.data.data_utils import predict, list_eval_keys
 
 
 def make_dataset(path,

@@ -33,7 +33,7 @@ from tensorflow.keras.layers import Conv2DTranspose
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.models import Sequential
 
-from uflow import uflow_utils
+from src import uflow_utils
 
 
 def normalize_features(feature_list, normalize, center, moments_across_channels,

@@ -24,9 +24,9 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from uflow import uflow_plotting
-from uflow import uflow_utils
-from uflow.data import data_utils
+from src import uflow_plotting
+from src import uflow_utils
+from src.data import data_utils
 
 
 # pylint:disable=g-long-lambda

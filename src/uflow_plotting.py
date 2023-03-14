@@ -31,7 +31,7 @@ import cv2
 import pylab
 from tqdm import tqdm
 
-from uflow import uflow_utils  # for resampling the warped image
+from src import uflow_utils  # for resampling the warped image
 
 # How much to scale motion magnitude in visualization.
 _FLOW_SCALING_FACTOR = 50.0

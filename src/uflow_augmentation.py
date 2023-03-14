@@ -27,7 +27,7 @@ import gin.tf
 import tensorflow as tf
 from tensorflow_addons import image as tfa_image
 
-from uflow import uflow_utils
+from src import uflow_utils
 
 
 def apply_augmentation(images, flow=None, mask=None,

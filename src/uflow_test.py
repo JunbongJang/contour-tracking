@@ -19,7 +19,7 @@ from absl.testing import absltest
 import numpy as np
 import tensorflow as tf
 
-from uflow.contour_flow_net import ContourFlow
+from src.contour_flow_net import ContourFlow
 
 
 class UflowTest(absltest.TestCase):

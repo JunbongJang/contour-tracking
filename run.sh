@@ -17,8 +17,4 @@
 set -e  # the shell exits when the command fails
 set -x  # prints command arguments during execution
 
-pip install -r uflow/requirements.txt
-python -m uflow.uflow_test
-python -m uflow.misc.convert_video_to_dataset_test
-python -m uflow.export.freeze_model_test
-python -m uflow.uflow_utils_test
+pip install -r requirements.txt

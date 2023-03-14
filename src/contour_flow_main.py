@@ -25,12 +25,12 @@ import gin
 import numpy as np
 import tensorflow as tf
 
-from uflow import uflow_augmentation
-from uflow import uflow_data
+from src import uflow_augmentation
+from src import uflow_data
 # pylint:disable=unused-import
-from uflow import uflow_flags
-from uflow import uflow_plotting
-from uflow.contour_flow_net import ContourFlow
+from src import uflow_flags
+from src import uflow_plotting
+from src.contour_flow_net import ContourFlow
 
 FLAGS = flags.FLAGS
 

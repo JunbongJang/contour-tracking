@@ -19,7 +19,7 @@ from absl.testing import absltest
 import numpy as np
 import tensorflow as tf
 
-from uflow import uflow_utils
+from src import uflow_utils
 
 
 class UflowUtilsTest(absltest.TestCase):

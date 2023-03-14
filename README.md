@@ -1,18 +1,24 @@
-# Contour Tracker
+# Contour tracking
+
+## Setup
+We ran this code in the following setting.
+* Python 3.8
+* Tensorflow 2.4.3
+* Ubuntu 18.04
 
 ## Installation
+Build and run Docker using our Dockerfile.
+* For instance:
+    >sudo docker build -t tf24_contour_tracking .
 
-To create a docker using Dockerfile
->sudo docker run -v /home/junbong/optical_flow:/home/docker/optical_flow -v /data/junbong/optical_flow/generated_3_5_2023:/data/junbong/optical_flow/generated_3_5_2023 --gpus '"device=0"' -it tf24_uflow
->sudo docker run -v /home/junbong/optical_flow:/home/docker/optical_flow -v /data/junbong/optical_flow/generated_3_5_2023:/data/junbong/optical_flow/generated_3_5_2023 -v /data/junbong/optical_flow/assets:/data/junbong/optical_flow/assets --gpus '"device=1"' -it tf24_uflow
+    >sudo docker run -v /home/junbong/contour-tracking:/home/docker/contour-tracking -v /data/junbong/optical_flow/generated_3_5_2023:/data/junbong/optical_flow/generated_3_5_2023 -v /data/junbong/optical_flow/assets:/data/junbong/optical_flow/assets --gpus '"device=0"' -it tf24_contour_tracking
 
-To set up requirements in the Linux terminal
->./uflow/run.sh
+Set up requirements
+>./run.sh
 
 ## Data Download
 
 ## Data Pre-processing
-These are documentations for creating dataset, currently not in this repository
 The results are stored at /AI-for-fun/generated/Computer Vision/Tracking/
 
 To create GT tracking points using our GUI,
@@ -58,13 +64,6 @@ To preprocess the segmentation masks
 
 ## Training
 
-#### To train the network on PoST dataset
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/post/tfrecord/training/ --height=640 --width=640 --generated_dir=uflow/generated/post/ --use_tracking_points
-
-#### To train the network on floating polygon dataset
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/floating_polygon/tfrecord/training/ --height=640 --width=640 --generated_dir=uflow/generated/floating_polygon/ --use_tracking_points
-
-#### To train the network on live cell dataset
 ###### MARS-Net dataset (Supervised Learning by pseudu-labels)
 >python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack/ --use_segmentations --use_tracking_points
 
@@ -112,24 +111,10 @@ To preprocess the segmentation masks
 
 ## Prediction
 
-##### To predict on Phase Contrast or Fluorescence Confocal live cell videos all at once, modify and run
+##### To predict Phase Contrast or Fluorescence Confocal live cell videos all at once, modify and run
 >./uflow/batch_predict.sh
 
-##### To predict on PoST dataset
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/post/tfrecord/test/ --generated_dir=uflow/generated/post/ --use_tracking_points
-
-##### To predict on floating polygon dataset
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/floating_polygon/tfrecord/test/ --generated_dir=uflow/generated/floating_polygon/ --use_tracking_points
-
-##### To predict on live cell dataset
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/pc_celltrack/tfrecord/training/ --generated_dir=uflow/generated/pc_celltrack/  --use_segmentations --use_tracking_points --width=256 --height=256
-
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/pc_celltrack_even/tfrecord/training/ --generated_dir=uflow/generated/pc_celltrack_even/  --use_segmentations --use_tracking_points --width=256 --height=256
-
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/pc_celltrack_sparse_even/tfrecord/training/ --generated_dir=uflow/generated/pc_celltrack_sparse_even/  --use_segmentations --use_tracking_points --width=256 --height=256
-
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/valid/ --generated_dir=uflow/generated/pc_5small_sparse_matlab_seg_all_points_vgg16flip_nornn_multi_lam3_costvol_batch4/  --use_seg_points --use_tracking_points --width=256 --height=256
-
+##### To predict an individual live cell dataset
 >python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/valid/ --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/  --use_seg_points --use_tracking_points --width=256 --height=256
 
 >python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/HACKS_live/tfrecord/valid/ --generated_dir=uflow/generated/HACKS_live_cycle_normal_batch8/  --use_seg_points --use_tracking_points --width=512 --height=512

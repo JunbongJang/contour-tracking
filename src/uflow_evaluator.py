@@ -23,11 +23,11 @@ from absl import logging
 import gin
 import tensorflow as tf
 
-from uflow import uflow_data
+from src import uflow_data
 # pylint:disable=unused-import
-from uflow import uflow_flags
-from uflow import uflow_main
-from uflow import uflow_plotting
+from src import uflow_flags
+from src import uflow_main
+from src import uflow_plotting
 
 
 FLAGS = flags.FLAGS

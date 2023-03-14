@@ -22,8 +22,8 @@ import time
 import sys
 
 import tensorflow as tf
-from uflow import uflow_plotting
-from uflow.uflow_resampler import resampler
+from src import uflow_plotting
+from src.uflow_resampler import resampler
 import cv2
 import numpy as np
 

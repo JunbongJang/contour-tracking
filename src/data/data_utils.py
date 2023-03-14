@@ -30,10 +30,10 @@ from statistics import mean
 import numpy as np
 import tensorflow as tf
 
-from uflow import tracking_utils
-from uflow import uflow_plotting
-from uflow import uflow_utils
-from uflow import metrics
+from src import tracking_utils
+from src import uflow_plotting
+from src import uflow_utils
+from src import metrics
 from datetime import datetime
 
 

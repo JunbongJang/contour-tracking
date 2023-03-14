@@ -26,10 +26,10 @@ from functools import partial
 
 import tensorflow as tf
 
-from uflow import uflow_augmentation
-from uflow.data import generic_flow_dataset as flow_dataset
-from uflow.data import kitti
-from uflow.data import sintel
+from src import uflow_augmentation
+from src.data import generic_flow_dataset as flow_dataset
+from src.data import kitti
+from src.data import sintel
 
 # pylint:disable=g-long-lambda
 

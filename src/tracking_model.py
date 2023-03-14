@@ -12,9 +12,7 @@ import numpy as np
 import tensorflow as tf
 import cv2
 
-from uflow.tracking_utils import generate_pos_emb, get_adj_ind, rel2abs, abs2rel, bilinear_sampler_1d, transform, cnt2poly, \
-    cost_volume_at_contour_points, normalize_1d_features, make_contour_order_indices_from_offsets, normalize_each_row
-from uflow.contour_flow_model import normalize_features
+from src.tracking_utils import generate_pos_emb, get_adj_ind, abs2rel, bilinear_sampler_1d, cnt2poly, cost_volume_at_contour_points, normalize_1d_features
 
 
 class PointSetTracker(tf.Module):
@@ -87,10 +85,10 @@ class LocalAlignment(tf.keras.Model):
         # ])
 
         # ------------------------ Post Implementation ----------------------------
-        self.encoder = PostEncoder(out_dim=128)
-        self.align_module = LAM(feature_dim=128 + 4, state_dim=128, output_num=2)
+        # self.encoder = PostEncoder(out_dim=128)
+        # self.align_module = LAM(feature_dim=128 + 4, state_dim=128, output_num=2)
         # -------------------------------------------------------------------------
-        # self.encoder = LocalEncoder(out_dim=128)
+        self.encoder = LocalEncoder(out_dim=128)
         
         # self.spatial_offset_module = LAM(feature_dim=128 + 4, state_dim=128, output_num=2)
 
@@ -146,100 +144,66 @@ class LocalAlignment(tf.keras.Model):
 
         # ----------------------------------------------
         # single level, PoST
-        features = self.encoder(x0, x1)
-        a_feature = features[-1]
+        # features = self.encoder(x0, x1)
+        # a_feature = features[-1]
         
-        forward_sampled_cost_volume = cost_volume_at_contour_points(a_feature, a_feature, seg_point1, seg_point2, max_displacement=1)
-        backward_sampled_cost_volume = cost_volume_at_contour_points(a_feature, a_feature, seg_point2, seg_point1, max_displacement=1)
+        # forward_sampled_cost_volume = cost_volume_at_contour_points(a_feature, a_feature, seg_point1, seg_point2, max_displacement=1)
+        # backward_sampled_cost_volume = cost_volume_at_contour_points(a_feature, a_feature, seg_point2, seg_point1, max_displacement=1)
         
-        poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        m_in1 = tf.concat((forward_sampled_cost_volume, pos_emb, poly1), axis=-1)  # m_in shape is (B, N, C+4)
-        poly2 = cnt2poly(seg_point2)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        m_in2 = tf.concat((backward_sampled_cost_volume, pos_emb, poly2), axis=-1)  # m_in shape is (B, N, C+4)
+        # poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
+        # m_in1 = tf.concat((forward_sampled_cost_volume, pos_emb, poly1), axis=-1)  # m_in shape is (B, N, C+4)
+        # poly2 = cnt2poly(seg_point2)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
+        # m_in2 = tf.concat((backward_sampled_cost_volume, pos_emb, poly2), axis=-1)  # m_in shape is (B, N, C+4)
         
-        N = seg_point1.shape[1]
-        adj = get_adj_ind(self.adj_num, N)
-        forward_spatial_offset = self.align_module(m_in1) # adj
-        backward_spatial_offset = self.align_module(m_in2)
+        # N = seg_point1.shape[1]
+        # adj = get_adj_ind(self.adj_num, N)
+        # forward_spatial_offset = self.align_module(m_in1) # adj
+        # backward_spatial_offset = self.align_module(m_in2)
         
-        saved_offset[0] = forward_spatial_offset
+        # saved_offset[0] = forward_spatial_offset
 
         # ----------------------------------------------
         # single level, OURS
 
-        # features1 = self.encoder(x0)
-        # features2 = self.encoder(x1)
-        # a_feature1 = features1[-1]
-        # a_feature2 = features2[-1]
+        features1 = self.encoder(x0)
+        features2 = self.encoder(x1)
+        a_feature1 = features1[-1]
+        a_feature2 = features2[-1]
 
-        # # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
-        # sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
-        # normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
-        # poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        # concat_sampled_features1 = tf.concat((normalized_sampled_feature1, pos_emb, poly1),
-        #                                      axis=-1)  # m_in shape is (B, N, C+4)
+        # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
+        sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
+        normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
+        poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
+        concat_sampled_features1 = tf.concat((normalized_sampled_feature1, pos_emb, poly1),
+                                             axis=-1)  # m_in shape is (B, N, C+4)
 
-        # sampled_feature2 = bilinear_sampler_1d(a_feature2, seg_point2[:, :, 0], seg_point2[:, :, 1])  # B x N x c
-        # normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
-        # poly2 = cnt2poly(seg_point2)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        # concat_sampled_features2 = tf.concat((normalized_sampled_feature2, pos_emb, poly2),
-        #                                      axis=-1)  # m_in shape is (B, N, C+4)
+        sampled_feature2 = bilinear_sampler_1d(a_feature2, seg_point2[:, :, 0], seg_point2[:, :, 1])  # B x N x c
+        normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
+        poly2 = cnt2poly(seg_point2)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
+        concat_sampled_features2 = tf.concat((normalized_sampled_feature2, pos_emb, poly2),
+                                             axis=-1)  # m_in shape is (B, N, C+4)
 
-        # # cross_attn_tensor shape is ([batch_size, target's num_points, 132])
-        # # cross_attn_scores shape is ([batch_size, num_heads, target's num_points, source's num_points])
-        # # implement forward and backward attention
-        # # t_seg_point_mask1 = tf.transpose(seg_point_mask1, perm=[0,2,1])  # For each target index i, [0,i,:] gives 40 indices with 1 mask
-        # # t_seg_point_mask2 = tf.transpose(seg_point_mask2, perm=[0,2,1])
+        # cross_attn_tensor shape is ([batch_size, target's num_points, 132])
+        # cross_attn_scores shape is ([batch_size, num_heads, target's num_points, source's num_points])
+        # implement forward and backward attention
+        # t_seg_point_mask1 = tf.transpose(seg_point_mask1, perm=[0,2,1])  # For each target index i, [0,i,:] gives 40 indices with 1 mask
+        # t_seg_point_mask2 = tf.transpose(seg_point_mask2, perm=[0,2,1])
 
-        # # forward and backward cross attentions
+        # forward and backward cross attentions
+        forward_cross_attn, forward_cross_attn_scores = self.cross_attn_layer_forward(concat_sampled_features1, concat_sampled_features2, return_attention_scores=True)  # target (query), source(key)
+        backward_cross_attn, backward_cross_attn_scores = self.cross_attn_layer_backward(concat_sampled_features2, concat_sampled_features1, return_attention_scores=True)  # target, source
+        
+        # single cross attention
         # forward_cross_attn, forward_cross_attn_scores = self.cross_attn_layer_forward(concat_sampled_features1, concat_sampled_features2, return_attention_scores=True)  # target (query), source(key)
-        # backward_cross_attn, backward_cross_attn_scores = self.cross_attn_layer_backward(concat_sampled_features2, concat_sampled_features1, return_attention_scores=True)  # target, source
+        # backward_cross_attn, backward_cross_attn_scores = self.cross_attn_layer_forward(concat_sampled_features2, concat_sampled_features1, return_attention_scores=True)  # target (query), source(key)
         
-        # # single cross attention
-        # # forward_cross_attn, forward_cross_attn_scores = self.cross_attn_layer_forward(concat_sampled_features1, concat_sampled_features2, return_attention_scores=True)  # target (query), source(key)
-        # # backward_cross_attn, backward_cross_attn_scores = self.cross_attn_layer_forward(concat_sampled_features2, concat_sampled_features1, return_attention_scores=True)  # target (query), source(key)
-        
-        # # no cross attention is used
-        # # forward_cross_attn = concat_sampled_features1 + concat_sampled_features2
-        # # backward_cross_attn = forward_cross_attn
+        # no cross attention is used
+        # forward_cross_attn = concat_sampled_features1 + concat_sampled_features2
+        # backward_cross_attn = forward_cross_attn
 
-        # # Predict spatial (x,y) offset
-        # # seg_point1_adj = get_adj_ind(self.adj_num, seg_point1.shape[1])
-        # # seg_point2_adj = get_adj_ind(self.adj_num, seg_point2.shape[1])
-        # forward_spatial_offset = self.spatial_offset_module(forward_cross_attn)
-        # backward_spatial_offset = self.spatial_offset_module(backward_cross_attn)  # shape=(1, 1150, 2), dtype=float32
-        # saved_offset[0] = forward_spatial_offset
-
-        # ----------------------
-        # Classify id of each tracking point
-        # compute 2d Correlation matrix [B, num_seg_points, num_seg_points] <-- [B, num_seg_points, 132] * [B, num_seg_points, 132]
-        # forward_corr_2d_matrix = tf.einsum('bic,bjc->bij', forward_cross_attn, backward_cross_attn)
-        # backward_corr_2d_matrix = tf.transpose(forward_corr_2d_matrix, perm=[0,2,1])
-        #
-        # # make values along last dimension sum to one
-        # softmax_forward_corr_2d_matrix = tf.nn.softmax(forward_corr_2d_matrix, axis=-1) # shape=(B, 1150, 1150), dtype=float32
-        # softmax_backward_corr_2d_matrix = tf.nn.softmax(backward_corr_2d_matrix, axis=-1) # shape=(B, 1150, 1150), dtype=float32
-        # saved_offset[0] = softmax_forward_corr_2d_matrix[0,50,:]
-
-        # ------------------
-        # # Regress id assignments offset from current points
-        # forward_id_assign_offsets = self.assign_module(forward_cross_attn)
-        #
-        # backward_id_assign_offsets = self.assign_module(backward_cross_attn)
-        # saved_offset[0] = tf.concat([forward_id_assign_offsets, backward_id_assign_offsets], axis=-1)
-        #
-        # # compute 2d Correlation matrix by outer product
-        # corr_2d_matrix = tf.einsum('bi,bj->bij', forward_id_assign_offsets[:,:,0], backward_id_assign_offsets[:,:,0])
-        # # make values along last dimension sum to one
-        # softmax_corr_2d_matrix = tf.nn.softmax(normalize_each_row(corr_2d_matrix), axis=-1) # shape=(B, 1150, 1150), dtype=float32
-        # # e.g) tf.nn.softmax(tf.constant([[[1,2,3,4,5],[4,5,6,7,8]],[[1,2,3,4,5],[4,5,6,7,8]]], dtype=tf.float32), axis=-1)
-        # ------------------
-
-        # add absolute contour index to the id offset
-        # forward_contour_order_indices = make_contour_order_indices_from_offsets(forward_id_assign_offsets)
-        # final_forward_id_assign = forward_contour_order_indices + forward_id_assign_offsets
-        # backward_contour_order_indices = make_contour_order_indices_from_offsets(backward_id_assign_offsets)
-        # final_backward_id_assign = backward_contour_order_indices + backward_id_assign_offsets
+        forward_spatial_offset = self.spatial_offset_module(forward_cross_attn)
+        backward_spatial_offset = self.spatial_offset_module(backward_cross_attn)  # shape=(1, 1150, 2), dtype=float32
+        saved_offset[0] = forward_spatial_offset
 
         return forward_spatial_offset, backward_spatial_offset, saved_offset
 

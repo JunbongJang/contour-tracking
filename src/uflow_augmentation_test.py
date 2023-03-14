@@ -23,8 +23,8 @@ from absl.testing import absltest
 import numpy as np
 import tensorflow as tf
 
-from uflow import uflow_augmentation
-from uflow import uflow_utils
+from src import uflow_augmentation
+from src import uflow_utils
 
 
 class UflowAugmentationTest(absltest.TestCase):

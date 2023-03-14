@@ -26,10 +26,10 @@ import cv2
 import gin
 import tensorflow as tf
 
-from uflow import contour_flow_model
-from uflow import tracking_model
-from uflow import uflow_utils
-from uflow import tracking_utils
+from src import contour_flow_model
+from src import tracking_model
+from src import uflow_utils
+from src import tracking_utils
 
 
 @gin.configurable

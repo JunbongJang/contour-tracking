@@ -26,7 +26,7 @@ from absl import flags
 import imageio
 import numpy as np
 import tensorflow as tf
-from uflow.data_conversion_scripts import conversion_utils
+from src.data_conversion_scripts import conversion_utils
 import cv2
 
 FLAGS = flags.FLAGS

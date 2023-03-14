@@ -17,10 +17,10 @@
 
 from absl.testing import absltest
 
-from uflow.data import generic_flow_dataset
-from uflow.data import kitti
-from uflow.data import sintel
-from uflow.data.dataset_locations import dataset_locations
+from src.data import generic_flow_dataset
+from src.data import kitti
+from src.data import sintel
+from src.data.dataset_locations import dataset_locations
 
 
 DATASETS_AND_SIZE = {
