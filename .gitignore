@@ -21,7 +21,7 @@ dist/
 
 **/assets/*
 **/generated/*
-**/misc/generated/*
+**/misc/generated_mask_edge_on_image/*
 *.png
 *.mp4
 *.mov
