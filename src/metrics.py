@@ -1,8 +1,24 @@
-'''
-Author: Junbong Jang and from various sources
-Date: 3/15/2022
+# coding=utf-8
+# Copyright 2023 Junbong Jang.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+'''
 Collection of metrics to evaluate performance of contour tracking models
+
+A few of them are the Point Tracking Metrics implemented in Polygonal Point Set Tracking
+These measure the distance between the exact corresponding points
+from https://github.com/ghnam-ken/PoST/blob/main/eval/metric.py
 '''
 
 import numpy as np
@@ -10,13 +26,6 @@ import math
 import cv2
 from skimage.morphology import disk
 
-
-'''
-Point Tracking Metrics implemented in Polygonal Point Set Tracking
-These measure the distance between the exact corresponding points as follows
-
-from https://github.com/ghnam-ken/PoST/blob/main/eval/metric.py
-'''
 
 def normalize_points(pts, image_width, image_height):
     pts = pts.copy()
@@ -340,40 +349,3 @@ def get_warp_error(a_warped_contour, a_contour):
     final_error = robust_l1(cliped_error)
 
     return final_error
-
-'''
-Spatial Accuracy and Temporal Accuracy implemented in Coherent Parametric Contours for Interactive Video Segmentation by Yao Lu
-The distance was computed from the ground truth points to their closest points in the predicted contour
-
-from http://yao.lu/cpc/
-'''
-
-# # Compute spatial accuracy
-# float acc(vector<Point> gt, vector<Point> res, float th)
-# {
-# 	int hit = 0;
-# 	for (int i = 0; i < gt.size(); i++)
-# 	{
-# 		if(abs(pointPolygonTest(res, gt[i], true)) <= th)
-# 			hit++;
-# 	}
-# 	return (float)hit / gt.size();
-# }
-#
-# # Compute temporal consistency
-# float cons(vector<Point> gt0, vector<Point> gt1, vector<Point> res0, vector<Point> res1, float th)
-# {
-# 	assert(gt0.size() == gt1.size());
-# 	vector<float> dist0, dist1;
-# 	int hit = 0;
-# 	for (int i = 0; i < gt0.size(); i++)
-# 		dist0.push_back(pointPolygonTest(res0, gt0[i], true));
-# 	for (int i = 0; i < gt1.size(); i++)
-# 		dist1.push_back(pointPolygonTest(res1, gt1[i], true));
-# 	for (int i = 0; i < gt0.size(); i++)
-# 	{
-# 		if (abs(dist0[i] - dist1[i]) <= th)
-# 			hit++;
-# 	}
-# 	return (float)hit / gt0.size();
-# }

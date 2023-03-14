@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Google Research Authors.
+# Copyright 2023 Junbong Jang.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 # limitations under the License.
 
 # Lint as: python3
+
 """Flags used by uflow training and evaluation."""
+
 from absl import flags
 
 FLAGS = flags.FLAGS
@@ -60,7 +62,7 @@ flags.DEFINE_bool('no_checkpointing', False,
                   'Do not save model checkpoints during training.')
 flags.DEFINE_integer('epoch_length', 1000,
                      'Number of gradient steps per epoch.')
-flags.DEFINE_integer('num_train_steps', int(3e4),
+flags.DEFINE_integer('num_train_steps', int(5e4),
                      'Number of gradient steps to train for.')
 flags.DEFINE_integer('selfsup_after_num_steps', int(5e5),
                      'Number of gradient steps before self-supervision.')
@@ -82,7 +84,7 @@ flags.DEFINE_string('optimizer', 'adam', 'One of "adam", "sgd"')
 flags.DEFINE_float('gpu_learning_rate', 10**-4, 'Learning rate for training '
                    'UFlow on GPU.')
 flags.DEFINE_integer('lr_decay_after_num_steps', 10000, '')
-flags.DEFINE_integer('lr_decay_steps', 30000, '')
+flags.DEFINE_integer('lr_decay_steps', 50000, '')
 flags.DEFINE_string('lr_decay_type', 'linear',
                     'One of ["none", "exponential", "linear", "gaussian"]')
 flags.DEFINE_bool(

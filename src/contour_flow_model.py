@@ -1,13 +1,5 @@
-'''
-Author: Junbong Jang
-Date: 2/22/2022
-
-Implement contour flow model that uses the structural information by circular convolution
-Estimates the optical flow along the contour
-
-'''
 # coding=utf-8
-# Copyright 2021 The Google Research Authors.
+# Copyright 2023 Junbong Jang.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +13,10 @@ Estimates the optical flow along the contour
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
+'''
+Implement contour flow model takes features along the contour
+Estimates the optical flow along the contour
+'''
 
 import collections
 

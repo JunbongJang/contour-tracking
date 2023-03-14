@@ -13,7 +13,7 @@
 Tensorflow implementation of contour tracking of live cell and jellyfish videos.<br><br>
 
 <div align="center">
-    <img width="700" src='architecture.png' alt="architecture"/>
+    <img width="800" src='architecture.png' alt="architecture"/>
 </div>
 
 
@@ -60,23 +60,23 @@ Run this after MATLAB_tracking_points.py and process_tracking_points.py --> samp
 ## Data Conversion to TFRecord
 
 To create tfrecords for PoST dataset
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/post/ --shard=0 --num_shards=1 --img_format=jpg
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/post/ --shard=0 --num_shards=1 --img_format=jpg
 
 To create tfrecords with images + segmentation + tracking points
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/pc_celltrack/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/pc_celltrack_even/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/pc_celltrack_matlab/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/pc_5small_sparse_matlab_64_points/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_celltrack/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_celltrack_even/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_celltrack_matlab/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_5small_sparse_matlab_64_points/ --shard=0 --num_shards=1 --img_format=png --segmentation_format=png
 
 To create tfrecords with images + seg_points + tracking_points
 For training set
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/pc_5small_sparse_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_5small_sparse_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
 
 For test set
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/pc_5small_dense_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/HACKS_live/ --shard=0 --num_shards=1 --img_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_5small_dense_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/HACKS_live/ --shard=0 --num_shards=1 --img_format=png
 
->python -m uflow.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=uflow/assets/Jellyfish/ --shard=0 --num_shards=1 --img_format=png
+>python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/Jellyfish/ --shard=0 --num_shards=1 --img_format=png
 
 To preprocess the segmentation masks
 >python misc/get_edge_from_segmentation.py
@@ -84,22 +84,22 @@ To preprocess the segmentation masks
 ## Training
 
 ###### MARS-Net dataset (Supervised Learning by pseudu-labels)
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack/ --use_segmentations --use_tracking_points
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack/ --use_segmentations --use_tracking_points
 
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_even/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_even/ --use_segmentations --use_tracking_points
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_even/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_even/ --use_segmentations --use_tracking_points
 
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_sparse_even/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_sparse_even/ --use_segmentations --use_tracking_points
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_sparse_even/tfrecord/training/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_sparse_even/ --use_segmentations --use_tracking_points
 
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_sparse5_matlab_7_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_celltrack_sparse5_matlab_7_points/tfrecord/valid/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_sparse5_matlab_7_points_local_vgg16_three_lam_multi_valid/ --use_tracking_points
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_sparse5_matlab_7_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_celltrack_sparse5_matlab_7_points/tfrecord/valid/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_sparse5_matlab_7_points_local_vgg16_three_lam_multi_valid/ --use_tracking_points
 
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_sparse_matlab_7_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_celltrack_sparse_matlab_7_points/tfrecord/valid/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_sparse_matlab_7_points_local_vgg16_three_lam_multi_valid/ --use_tracking_points
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_celltrack_sparse_matlab_7_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_celltrack_sparse_matlab_7_points/tfrecord/valid/ --height=480 --width=384 --generated_dir=uflow/generated/pc_celltrack_sparse_matlab_7_points_local_vgg16_three_lam_multi_valid/ --use_tracking_points
 
 ###### MARS-Net dataset (only 40 frames)
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_5small_sparse_matlab_64_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_celltrack/tfrecord/training/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_sparse_matlab_64_points_photometric_vgg16flip_nornn_multi_lam3_costvol_batch4/ --use_tracking_points --batch_size=4
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_5small_sparse_matlab_64_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_celltrack/tfrecord/training/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_sparse_matlab_64_points_photometric_vgg16flip_nornn_multi_lam3_costvol_batch4/ --use_tracking_points --batch_size=4
 
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/valid/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_sparse_matlab_seg_all_points_vgg16flip_nornn_multi_lam3_costvol_batch4/ --use_tracking_points --use_seg_points --batch_size=4 
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/valid/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_sparse_matlab_seg_all_points_vgg16flip_nornn_multi_lam3_costvol_batch4/ --use_tracking_points --use_seg_points --batch_size=4 
 
->python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/valid/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_sparse_matlab_seg_all_points_cycle_mecha_mask_mlp_batch1/ --use_tracking_points --use_seg_points --batch_size=1
+>python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_sparse_matlab_seg_all_points/tfrecord/valid/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_sparse_matlab_seg_all_points_cycle_mecha_mask_mlp_batch1/ --use_tracking_points --use_seg_points --batch_size=1
 
 ###### MARS-Net dataset (all 200 frames)
 >python -m uflow.contour_flow_main --train_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/test4/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/ --use_tracking_points --use_seg_points --batch_size=8
@@ -131,12 +131,22 @@ To preprocess the segmentation masks
 ## Prediction
 
 ##### To predict Phase Contrast or Fluorescence Confocal live cell videos all at once, modify and run
->./uflow/batch_predict.sh
+>./batch_predict.sh
 
 ##### To predict an individual live cell dataset
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/valid/ --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/  --use_seg_points --use_tracking_points --width=256 --height=256
+>python -m src.contour_flow_main --predict_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/valid/ --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/  --use_seg_points --use_tracking_points --width=256 --height=256
 
->python -m uflow.contour_flow_main --predict_on=custom:uflow/assets/HACKS_live/tfrecord/valid/ --generated_dir=uflow/generated/HACKS_live_cycle_normal_batch8/  --use_seg_points --use_tracking_points --width=512 --height=512
+>python -m src.contour_flow_main --predict_on=custom:uflow/assets/HACKS_live/tfrecord/valid/ --generated_dir=uflow/generated/HACKS_live_cycle_normal_batch8/  --use_seg_points --use_tracking_points --width=512 --height=512
+
+## Citation
+```
+@inproceedings{jang2023contourtracking,
+  title={Unsupervised Contour Tracking of Live Cells by Mechanical and Cycle Consistency Losses},
+  author={Jang, Junbong and Lee, Kwonmoo and Kim, Tae-Kyun},
+  booktitle={CVPR},
+  year={2023}
+}
+```
 
 ## Acknowledgements
 This program is built upon **[UFlow](https://github.com/google-research/google-research/tree/master/uflow)**, a library for research on unsupervised learning of optical flow from **[What Matters in Unsupervised Optical Flow](https://arxiv.org/pdf/2006.04902.pdf)**.

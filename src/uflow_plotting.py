@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Google Research Authors.
+# Copyright 2023 Junbong Jang.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""UFlow plotting.
-
-This library provides some plotting functionality for optical flow.
+"""
+Some plotting functionality for contour tracking inference.
 """
 
 import io
