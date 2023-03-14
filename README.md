@@ -1,8 +1,8 @@
 # Contour tracking
 ### [Project Page](https://junbongjang.github.io/projects/contour-tracking/index.html) | [Paper]() | [Data]()
 
-Tensorflow implementation of contour tracking of live cell and jellyfish videos.<br><br>
-[Unsupervised Contour Tracking of Live Cells by Mechanical and Cycle Consistency Losses](https://junbongjang.github.io/projects/contour-tracking/index.html)  
+**[Unsupervised Contour Tracking of Live Cells by Mechanical and Cycle Consistency Losses](https://junbongjang.github.io/projects/contour-tracking/index.html)**
+ <br />
  [Junbong Jang](https://junbongjang.github.io/)\*<sup>1</sup>,
  [Kwonmoo Lee](https://research.childrenshospital.org/kwonmoo-lee)\*<sup>2,3</sup>,
  [Tae-Kyun Kim](https://sites.google.com/view/tkkim/home)\*<sup>1,4</sup>
@@ -10,7 +10,12 @@ Tensorflow implementation of contour tracking of live cell and jellyfish videos.
  <br />*denotes corresponding authors
  <br />Accepted to CVPR 2023
 
-<img width="700" src='architecture.png' alt="architecture"/>
+Tensorflow implementation of contour tracking of live cell and jellyfish videos.<br><br>
+
+<div align="center">
+    <img width="700" src='architecture.png' alt="architecture"/>
+</div>
+
 
 
 ## Setup
