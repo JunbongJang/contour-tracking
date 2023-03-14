@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2021 The Google Research Authors.
+# Copyright 2023 Junbong Jang.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

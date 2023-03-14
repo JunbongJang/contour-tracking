@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Google Research Authors.
+# Copyright 2023 Junbong Jang.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Data loading and evaluation utilities shared across multiple datasets.
+
+"""
+Data loading and evaluation utilities shared across multiple datasets.
 
 Some datasets are very similar, so to prevent code duplication, shared utilities
 are put into this class.
