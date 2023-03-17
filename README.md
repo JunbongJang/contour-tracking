@@ -3,7 +3,7 @@
 
 **[Unsupervised Contour Tracking of Live Cells by Mechanical and Cycle Consistency Losses](https://junbongjang.github.io/projects/contour-tracking/index.html)**
  <br />
- [Junbong Jang](https://junbongjang.github.io/)\*<sup>1</sup>,
+ [Junbong Jang](https://junbongjang.github.io/)\<sup>1</sup>,
  [Kwonmoo Lee](https://research.childrenshospital.org/kwonmoo-lee)\*<sup>2,3</sup>,
  [Tae-Kyun Kim](https://sites.google.com/view/tkkim/home)\*<sup>1,4</sup>
  <br /><sup>1</sup>KAIST, <sup>2</sup>Boston Children's Hospital, <sup>3</sup>Harvard Medical School, <sup>4</sup>Imperial College London
