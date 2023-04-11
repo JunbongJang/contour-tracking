@@ -1,5 +1,5 @@
 # Contour tracking
-### [Project Page](https://junbongjang.github.io/projects/contour-tracking/index.html) | [Paper]() | [Data]()
+### [Project Page](https://junbongjang.github.io/projects/contour-tracking/index.html) | [Paper](https://arxiv.org/abs/2303.08364) | [Data](https://zenodo.org/record/7754589)
 
 **[Unsupervised Contour Tracking of Live Cells by Mechanical and Cycle Consistency Losses](https://junbongjang.github.io/projects/contour-tracking/index.html)**
  <br />
