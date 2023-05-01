@@ -23,12 +23,13 @@
 import numpy as np
 import tensorflow as tf
 import cv2
+from einops import rearrange
 
 from src.tracking_utils import generate_pos_emb, get_adj_ind, abs2rel, bilinear_sampler_1d, cnt2poly, cost_volume_at_contour_points, normalize_1d_features
 
 
 class PointSetTracker(tf.Module):
-    def __init__(self, num_iter=5, input_image_size=(None, None, 3)):
+    def __init__(self, num_iter=5):
         super(PointSetTracker, self).__init__()
         self.num_iter = num_iter
         self.local_alignment = LocalAlignment(num_iter=num_iter)
@@ -42,7 +43,7 @@ class PointSetTracker(tf.Module):
 
         return pos_emb
 
-    def propagate(self, x0, x1, orig_seg_point1, orig_seg_point2, pos_emb):
+    def propagate(self, x0, x1, orig_seg_point1, orig_seg_point2, pos_emb, source_sampled_contour_index, target_sampled_contour_index):
         '''
 
         :param x0: First Image
@@ -58,16 +59,16 @@ class PointSetTracker(tf.Module):
         seg_point_mask1 = orig_seg_point1[:, :, 2:]
         seg_point_mask2 = orig_seg_point2[:, :, 2:]
 
-        forward_spatial_offset, backward_spatial_offset, saved_offset = self.local_alignment(x0, x1, seg_point1, seg_point2, pos_emb, seg_point_mask1, seg_point_mask2)
+        occ_out = self.local_alignment(x0, x1, seg_point1, seg_point2, pos_emb, seg_point_mask1, seg_point_mask2, source_sampled_contour_index, target_sampled_contour_index)
 
-        return forward_spatial_offset, backward_spatial_offset, saved_offset
+        return occ_out
 
     def __call__(self, *args, **kwargs):
         kwargs.pop('training', None)  # because kwargs has training Keyword
         in_len = len(args) + len(kwargs)
         if in_len == 1:
             return self.initialize(*args, **kwargs)
-        elif in_len == 5:
+        elif in_len == 7:
             return self.propagate(*args, **kwargs)
         else:
             raise ValueError(f'input length of {in_len} is not supported')
@@ -106,19 +107,28 @@ class LocalAlignment(tf.keras.Model):
         # ])
 
         # Dense layers
-        self.spatial_offset_module = tf.keras.Sequential([
-            tf.keras.layers.Dense(256),
-            tf.keras.layers.ReLU(),
-            tf.keras.layers.Dense(64),
-            tf.keras.layers.ReLU(),
-            tf.keras.layers.Dense(2)
-        ])
+        # self.spatial_offset_module = tf.keras.Sequential([
+        #     tf.keras.layers.Dense(256),
+        #     tf.keras.layers.ReLU(),
+        #     tf.keras.layers.Dense(64),
+        #     tf.keras.layers.ReLU(),
+        #     tf.keras.layers.Dense(2)
+        # ])
 
         # tf.keras.layers.MultiHeadAttention(num_heads=2, key_dim=64, value_dim=64)
         self.cross_attn_layer_forward = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=128, value_dim=128)
         self.cross_attn_layer_backward = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=128, value_dim=128)
 
-    def call(self, x0, x1, seg_point1, seg_point2, pos_emb, seg_point_mask1, seg_point_mask2):
+        self.pos_embed = tf.keras.layers.Dense(128)
+        self.occupancy_mlp = tf.keras.Sequential([
+            tf.keras.layers.Dense(256),
+            tf.keras.layers.ReLU(),
+            tf.keras.layers.Dense(64),
+            tf.keras.layers.ReLU(),
+            tf.keras.layers.Dense(1)
+        ])
+
+    def call(self, x0, x1, seg_point1, seg_point2, pos_emb, seg_point_mask1, seg_point_mask2, source_sampled_contour_index, target_sampled_contour_index):
         '''
 
         :param x0: original first feature (B, H, W, C)
@@ -135,7 +145,6 @@ class LocalAlignment(tf.keras.Model):
 
         :return:
         '''
-        saved_offset = {}  # key for layer number
 
         # ----------------------------------------------
         # single level, PoST
@@ -160,9 +169,9 @@ class LocalAlignment(tf.keras.Model):
         # ----------------------------------------------
         # single level, OURS
 
-        features1 = self.encoder(x0)
-        features2 = self.encoder(x1)
-        a_feature1 = features1[-1]
+        features1 = self.encoder(x0)  # [8, 256, 256, 128]
+        features2 = self.encoder(x1) 
+        a_feature1 = features1[-1]  
         a_feature2 = features2[-1]
 
         # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
@@ -196,11 +205,50 @@ class LocalAlignment(tf.keras.Model):
         # forward_cross_attn = concat_sampled_features1 + concat_sampled_features2
         # backward_cross_attn = forward_cross_attn
 
-        forward_spatial_offset = self.spatial_offset_module(forward_cross_attn)
-        backward_spatial_offset = self.spatial_offset_module(backward_cross_attn)  # shape=(1, 1150, 2), dtype=float32
-        saved_offset[0] = forward_spatial_offset
+        # forward_spatial_offset = self.spatial_offset_module(forward_cross_attn)
+        # backward_spatial_offset = self.spatial_offset_module(backward_cross_attn)  # shape=(1, 1150, 2), dtype=float32
+        # saved_offset[0] = forward_spatial_offset
 
-        return forward_spatial_offset, backward_spatial_offset, saved_offset
+        # return forward_spatial_offset, backward_spatial_offset, saved_offset
+    
+        # ----------------------
+        # Classify id of each tracking point
+        # ----------------------
+        # compute 2d Correlation matrix [B, num_seg_points, num_seg_points] <-- [B, num_seg_points, 132] * [B, num_seg_points, 132]
+        corr_2d_matrix = tf.einsum('bic,bjc->bij', forward_cross_attn, backward_cross_attn)
+        occ_out = self.MLP_score(corr_2d_matrix, source_sampled_contour_index, target_sampled_contour_index)
+
+        # make values along last dimension sum to one
+        # softmax_corr_2d_matrix = tf.nn.softmax(corr_2d_matrix, axis=-1) # shape=(B, 1640, 1640), dtype=float32
+        # saved_offset[0] = softmax_corr_2d_matrix[0,50,:]
+
+        return occ_out
+
+
+    def MLP_score(self, cost, source_sampled_contour_index, target_sampled_contour_index):
+        """
+        Arguments:
+            cost: B H_s H_t
+            src_coord: B N C
+            trg_coord: B N C
+        Returns:
+            ... D
+        """
+        
+        X, Y = tf.meshgrid(source_sampled_contour_index, target_sampled_contour_index)
+        X = tf.reshape(X, [-1])
+        Y = tf.reshape(Y, [-1])
+
+        X = tf.repeat( tf.expand_dims(X, axis=0), repeats=8, axis=0)  # (8, 10000)
+        Y = tf.repeat( tf.expand_dims(Y, axis=0), repeats=8, axis=0)  # (8, 10000)
+
+        sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), X, Y, abs_scale=True)
+        concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), X, Y], axis=-1)
+
+        occ = self.occupancy_mlp(concat_sampled_cost)
+        occ = tf.reshape(occ, [occ.shape[0], 100, 100, 1])
+        
+        return occ
 
 
 class LAM(tf.keras.layers.Layer):

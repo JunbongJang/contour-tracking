@@ -1145,7 +1145,7 @@ def bilinear_sampler_1d(input_feature, x, y, abs_scale=False):
     Ib = get_pixel_value(input_feature, x0, y1)
     Ic = get_pixel_value(input_feature, x1, y0)
     Id = get_pixel_value(input_feature, x1, y1)
-
+    
     # recast as float for delta calculation
     x0 = tf.cast(x0, 'float32')
     x1 = tf.cast(x1, 'float32')

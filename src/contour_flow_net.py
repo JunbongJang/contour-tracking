@@ -164,7 +164,7 @@ class ContourFlow(object):
     #     use_bfloat16=use_bfloat16,
     #     shared_flow_decoder=shared_flow_decoder)
 
-    self._tracking_model = tracking_model.PointSetTracker(num_iter=5, input_image_size=input_image_size)
+    self._tracking_model = tracking_model.PointSetTracker(num_iter=5)
 
     # By default, the teacher flow and feature models are the same as
     # the student flow and feature models.
@@ -605,7 +605,7 @@ class ContourFlow(object):
 
     return losses, saved_offset_dict
 
-  @tf.function
+  # @tf.function
   def train_step(self,
                  batch,
                  current_epoch,
@@ -868,7 +868,18 @@ class ContourFlow(object):
       # cur_seg_points_limit = tf.math.reduce_max(cur_seg_points_limit)
       # -------------------------------------------------------------------
       # find dense correspondence of all segmentation points, whereas gt id assignments are for a subset of points
-      forward_spatial_offset, backward_spatial_offset, saved_offset = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb)
+      # TODO: generate uniform numbers for each batch index instead of repeating 
+      source_sampled_contour_index = tf.random.uniform(shape=[10], maxval=prev_seg_points.shape[1], dtype=tf.float32, seed=10)
+      source_sampled_contour_index = tf.cast(source_sampled_contour_index, dtype=tf.int32)
+      import pdb;pdb.set_trace()
+
+      tracking_utils.get_closest_contour_id(prev_seg_points[:,source_sampled_contour_index,:2], None, cur_seg_points[:,:,:2])
+      # get 10 nearby target points for each source point 
+      target_sampled_contour_index = tf.random.uniform(shape=[100], maxval=cur_seg_points.shape[1], dtype=tf.float32, seed=10)
+      cycle_source_sampled_contour_index = tf.random.uniform(shape=[100], maxval=prev_seg_points.shape[1], dtype=tf.float32, seed=10)
+
+      occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, source_sampled_contour_index, target_sampled_contour_index)
+      occ_contour_backward = self._tracking_model(cur_patch, prev_patch, cur_seg_points, prev_seg_points, pos_emb, target_sampled_contour_index, cycle_source_sampled_contour_index)
 
       # forward_corr_2d_loss = tracking_utils.corr_2d_loss( gt_prev_id_assignments, gt_cur_id_assignments, forward_corr_2d_matrix)
       # backward_corr_2d_loss = tracking_utils.corr_2d_loss( gt_cur_id_assignments, gt_prev_id_assignments, backward_corr_2d_matrix)

@@ -12,5 +12,4 @@ tensorflow-gpu==2.4.3
 tensorflow-addons>=0.9.1
 tqdm
 scikit-image
-git+https://github.com/tensorflow/docs
 ipython

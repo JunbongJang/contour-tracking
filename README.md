@@ -32,7 +32,7 @@ Build and run Docker using our Dockerfile.
 
     >sudo docker run -v /home/junbong/contour-tracking:/home/docker/contour-tracking -v /data/junbong/optical_flow/generated_3_5_2023:/data/junbong/optical_flow/generated_3_5_2023 -v /data/junbong/optical_flow/assets:/data/junbong/optical_flow/assets --gpus '"device=0"' -it tf24_contour_tracking
 
-Install Python dependencies in the requirements.txt
+Then, install Python dependencies in the requirements.txt
 >./install_setup.sh
 
 ## Data Pre-processing
@@ -76,7 +76,7 @@ First, edit src/uflow_flags.py to change hyperparameters such as learning rate a
 ###### MARS-Net dataset (all 200 frames)
 >python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/test4/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/ --use_tracking_points --use_seg_points --batch_size=8
 
->python -m src.contour_flow_main --train_on=custom:/data/junbong/optical_flow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:/data/junbong/optical_flow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/test4/ --height=256 --width=256 --generated_dir=/data/junbong/optical_flow/generated_3_5_2023/pc_5small_dense_matlab_seg_all_points_cycle_normal_decay_re_batch8/ --use_tracking_points --use_seg_points --batch_size=8
+>python -m src.contour_flow_main --train_on=custom:/data/junbong/optical_flow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:/data/junbong/optical_flow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/test4/ --height=256 --width=256 --generated_dir=/data/junbong/optical_flow/generated_3_5_2023/pc_5small_dense_matlab_seg_all_points_cycle_normal_batch8/ --use_tracking_points --use_seg_points --batch_size=8
 
 
 ###### HACKS dataset (all 200 frames)
