@@ -29,6 +29,7 @@ import tensorflow as tf
 
 from src import uflow_augmentation
 from src.data import generic_flow_dataset as flow_dataset
+from src.data import data_utils
 
 # pylint:disable=g-long-lambda
 
@@ -273,7 +274,7 @@ def make_predict_function(predict_on, height, width, progress_bar, plot_dir,
       dataset = flow_dataset.make_dataset(path, mode=mode, height=height, width=width)
 
       predict_fn = partial(
-          flow_dataset.predict,
+          data_utils.predict,
           evaluate_bool=evaluate_bool)
 
     else:

@@ -25,10 +25,9 @@ import cv2
 import gin
 import tensorflow as tf
 
-from src import contour_flow_model
 from src import tracking_model
-from src import uflow_utils
 from src import tracking_utils
+from src import implicit_utils
 
 
 @gin.configurable
@@ -123,7 +122,7 @@ class ContourFlow(object):
       use_bfloat16: bool, whether to run in bfloat16 mode.
 
     Returns:
-      Uflow object instance.
+      ContourFlow object instance.
     """
     self._only_forward = only_forward
     self._build_selfsup_transformations = build_selfsup_transformations
@@ -143,33 +142,8 @@ class ContourFlow(object):
     self._selfsup_mask = selfsup_mask
     self._num_levels = num_levels
 
-    # self._feature_model = contour_flow_model.PWCFeaturePyramid(
-    #     level1_num_layers=level1_num_layers,
-    #     level1_num_filters=level1_num_filters,
-    #     level1_num_1x1=level1_num_1x1,
-    #     original_layer_sizes=original_layer_sizes,
-    #     num_levels=num_levels,
-    #     channel_multiplier=channel_multiplier,
-    #     pyramid_resolution='half',
-    #     use_bfloat16=use_bfloat16)
-    #
-    # self._flow_model = contour_flow_model.ContourFlowModel(
-    #     dropout_rate=dropout_rate,
-    #     normalize_before_cost_volume=normalize_before_cost_volume,
-    #     num_levels=num_levels,
-    #     use_feature_warp=use_feature_warp,
-    #     use_cost_volume=use_cost_volume,
-    #     channel_multiplier=channel_multiplier,
-    #     accumulate_flow=accumulate_flow,
-    #     use_bfloat16=use_bfloat16,
-    #     shared_flow_decoder=shared_flow_decoder)
 
     self._tracking_model = tracking_model.PointSetTracker(num_iter=5)
-
-    # By default, the teacher flow and feature models are the same as
-    # the student flow and feature models.
-    # self._teacher_flow_model = self._flow_model
-    # self._teacher_feature_model = self._feature_model
 
     self._learning_rate = learning_rate
     self._optimizer_type = optimizer
@@ -206,18 +180,6 @@ class ContourFlow(object):
     if occ_clip_max is None:
       occ_clip_max = {'fb_abs': 10.0, 'forward_collision': 5.0}
     self._occ_clip_max = occ_clip_max
-
-  def set_teacher_models(self, teacher_feature_model, teacher_flow_model):
-    self._teacher_feature_model = teacher_feature_model
-    self._teacher_flow_model = teacher_flow_model
-
-  @property
-  def feature_model(self):
-    return self._feature_model
-
-  @property
-  def flow_model(self):
-    return self._flow_model
 
   def update_checkpoint_dir(self, checkpoint_dir):
     """Changes the checkpoint directory for saving and restoring."""
@@ -259,61 +221,8 @@ class ContourFlow(object):
   def _make_or_reset_checkpoint(self):
     self._checkpoint = tf.train.Checkpoint(
         optimizer=self._optimizer,
-        # feature_model=self._feature_model,
-        # flow_model=self._flow_model,
         tracking_model=self._tracking_model,
         optimizer_step=tf.compat.v1.train.get_or_create_global_step())
-
-  # Use of tf.function breaks exporting the model, see b/138864493
-  def infer_no_tf_function(self,
-                           image1,
-                           image2,
-                           segmentation1,
-                           segmentation2,
-                           seg_point1=None,
-                           seg_point2=None,
-                           tracking_point1=None,
-                           tracking_point2=None,
-                           tracking_pos_emb=None,
-                           input_height=None,
-                           input_width=None,
-                           resize_flow_to_img_res=True,
-                           infer_occlusion=False,
-                           frame_index=None):
-    """Infer flow for two images.
-
-    Args:
-      image1: tf.tensor of shape [height, width, 3].
-      image2: tf.tensor of shape [height, width, 3].
-      input_height: height at which the model should be applied if different
-        from image height.
-      input_width: width at which the model should be applied if different from
-        image width
-      resize_flow_to_img_res: bool, if True, return the flow resized to the same
-        resolution as (image1, image2). If False, return flow at the whatever
-        resolution the model natively predicts it.
-      infer_occlusion: bool, if True, return both flow and a soft occlusion
-        mask, else return just flow.
-
-    Returns:
-      Optical flow for each pixel in image1 pointing to image2.
-    """
-
-    results = self.batch_infer_no_tf_function(
-        tf.stack([image1, image2])[None],
-        tf.stack([segmentation1, segmentation2])[None],
-        tf.stack([seg_point1, seg_point2])[None],
-        tf.stack([tracking_point1, tracking_point2])[None],
-        input_height=input_height,
-        input_width=input_width,
-        resize_flow_to_img_res=resize_flow_to_img_res,
-        infer_occlusion=infer_occlusion)
-
-    # Remove batch dimension from all results.
-    if isinstance(results, (tuple, list)):
-      return [x[0] for x in results]
-    else:
-      return results[0]
 
 
   def infer_tracking_function(self, images,
@@ -367,123 +276,62 @@ class ContourFlow(object):
 
     # -------------------- To remove negative padding -------------------
     # find the index in seg_points from where negative values start
-    # prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
+    prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
     # cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
 
-    forward_spatial_offset, backward_spatial_offset, saved_offset = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb)
+    # -------------------------------------------------------------------
+    # for every point in the prev contour, find its matching point on the current contour
 
-    return forward_spatial_offset, backward_spatial_offset, tracking_pos_emb, input_height, input_width
+    # prediction in a batch (400 points) for efficiency
+    num_points_in_batch = 400
+    predicted_cur_contour_indices_list = []
+    for for_index, a_prev_contour_index in enumerate(range(0, prev_seg_points_limit, num_points_in_batch)):
+      if (for_index+1)*num_points_in_batch > prev_seg_points_limit:  # last a_prev_contour_index
+        sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, prev_seg_points_limit-1, prev_seg_points_limit-a_prev_contour_index)
+      else:
+        sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, num_points_in_batch-1, num_points_in_batch)
+      sampled_prev_contour_indices = tf.expand_dims(sampled_prev_contour_indices, axis=0)
+      # find 20 nearby points in the current contour
+      closest_cur_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+
+      # predict occupancy between 100 prev points x 20*100 cur points
+      occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, closest_cur_sampled_contour_indices)
+
+      # find the current contour indices with max occupancy
+      predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, closest_cur_sampled_contour_indices)
+      predicted_cur_contour_indices_list.append(predicted_cur_contour_indices)
+    
+    predicted_cur_contour_indices_tensor = tf.concat(predicted_cur_contour_indices_list,axis=-1)
+    
+    # -----------------------------------
+    sampled_prev_contour_indices = implicit_utils.sample_initial_points(prev_seg_points, prev_seg_points_limit)
+    sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)  # Problem: only uses discrete representation of the image
+    
+    # first contour to second contour
+    closest_cur_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+    occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, closest_cur_sampled_contour_indices)
+    predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, closest_cur_sampled_contour_indices)
+
+    # second contour to first contour
+    closest_prev_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(predicted_cur_contour_indices, cur_seg_points, prev_seg_points)
+    occ_contour_backward = self._tracking_model(cur_patch, prev_patch, cur_seg_points, prev_seg_points, tracking_pos_emb, predicted_cur_contour_indices, closest_prev_sampled_contour_indices)
+    predicted_prev_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_backward, closest_prev_sampled_contour_indices)
+    
+    # first contour to second contour
+    closest_new_cur_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points)
+    occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, predicted_prev_contour_indices, closest_new_cur_sampled_contour_indices)
+
+    prev_gt_occ = implicit_utils.create_GT_occupnacy(sampled_prev_contour_indices, prev_seg_points.shape[:2], closest_prev_sampled_contour_indices)   # create GT occupancy on previous contour
+    backward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(prev_gt_occ, occ_contour_backward)
+
+    cur_gt_occ = implicit_utils.create_GT_occupnacy(predicted_cur_contour_indices, cur_seg_points.shape[:2], closest_new_cur_sampled_contour_indices)   # create GT occupancy on current contour
+    forward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(cur_gt_occ, occ_contour_forward)
 
 
-  def batch_infer_no_tf_function(self,
-                                 images,
-                                 segmentations,
-                                 seg_points=None,
-                                 tracking_points=None,
-                                 input_height=None,
-                                 input_width=None,
-                                 resize_flow_to_img_res=True,
-                                 infer_occlusion=False):
-    """Infers flow from two images.
+    return forward_occ_cycle_consistency_loss, backward_occ_cycle_consistency_loss, predicted_cur_contour_indices_tensor, tracking_pos_emb, input_height, input_width
+  
 
-    Args:
-      images: tf.tensor of shape [batchsize, 2, height, width, 3].
-      input_height: height at which the model should be applied if different
-        from image height.
-      input_width: width at which the model should be applied if different from
-        image width
-      resize_flow_to_img_res: bool, if True, return the flow resized to the same
-        resolution as (image1, image2). If False, return flow at the whatever
-        resolution the model natively predicts it.
-      infer_occlusion: bool, if True, return both flow and a soft occlusion
-        mask, else return just flow.
-
-    Returns:
-      Optical flow for each pixel in image1 pointing to image2.
-    """
-
-    batch_size, seq_len, orig_height, orig_width, image_channels = images.shape.as_list(
-    )
-
-    if input_height is None:
-      input_height = orig_height
-    if input_width is None:
-      input_width = orig_width
-
-    # Ensure a feasible computation resolution. If specified size is not
-    # feasible with the model, change it to a slightly higher resolution.
-    divisible_by_num = pow(2.0, self._num_levels)
-    if (input_height % divisible_by_num != 0 or
-        input_width % divisible_by_num != 0):
-      print('Cannot process images at a resolution of ' + str(input_height) +
-            'x' + str(input_width) + ', since the height and/or width is not a '
-            'multiple of ' + str(divisible_by_num) + '.')
-      # compute a feasible resolution
-      input_height = int(
-          math.ceil(float(input_height) / divisible_by_num) * divisible_by_num)
-      input_width = int(
-          math.ceil(float(input_width) / divisible_by_num) * divisible_by_num)
-      print('Inference will be run at a resolution of ' + str(input_height) +
-            'x' + str(input_width) + '.')
-
-    # Resize images to desired input height and width.
-    if input_height != orig_height or input_width != orig_width:
-      images = uflow_utils.resize(
-          images, input_height, input_width, is_flow=False)
-
-    # Flatten images by folding sequence length into the batch dimension, apply
-    # the feature network and undo the flattening.
-    images_flattened = tf.reshape(
-        images,
-        [batch_size * seq_len, input_height, input_width, image_channels])
-    # noinspection PyCallingNonCallable
-
-    features_flattened = self._feature_model(
-        images_flattened, split_features_by_sample=False)
-    features = [
-        tf.reshape(f, [batch_size, seq_len] + f.shape.as_list()[1:])
-        for f in features_flattened
-    ]
-
-    features1, features2 = [[f[:, i] for f in features] for i in range(2)]
-
-    # split segmentations
-    segmentation1 = segmentations[:, 0, :, :, :]
-    segmentation2 = segmentations[:, 1, :, :, :]
-
-    # Compute flow in frame of image1.
-    # noinspection PyCallingNonCallable
-    flow = self._flow_model(features1, features2, segmentation1, segmentation2, training=False)[0]
-
-    if infer_occlusion:
-      # noinspection PyCallingNonCallable
-      flow_backward = self._flow_model(features2, features1, segmentation1, segmentation2, training=False)[0]
-      warps, valid_warp_masks, range_map, occlusion_mask = self.infer_occlusion(flow, flow_backward)
-      # originally, the shape is [1, 160, 160, 1] before the resize
-
-      warps = uflow_utils.resize(
-          warps, orig_height, orig_width, is_flow=False)
-
-      valid_warp_masks = uflow_utils.resize(
-          valid_warp_masks, orig_height, orig_width, is_flow=False)
-
-      occlusion_mask = uflow_utils.resize(
-          occlusion_mask, orig_height, orig_width, is_flow=False)
-
-      range_map = uflow_utils.resize(
-          range_map, orig_height, orig_width, is_flow=False)
-
-    # Resize and rescale flow to original resolution. This always needs to be
-    # done because flow is generated at a lower resolution.
-    if resize_flow_to_img_res:
-      flow = uflow_utils.resize(flow, orig_height, orig_width, is_flow=True)
-
-    if infer_occlusion:
-      return flow, warps, valid_warp_masks, range_map, occlusion_mask
-
-    return flow
-
-  @tf.function
+  # @tf.function
   def infer(self,
             image1,
             image2,
@@ -506,56 +354,6 @@ class ContourFlow(object):
                                         tracking_pos_emb,
                                         input_height=input_height,
                                         input_width=input_width)
-
-    # return self.infer_no_tf_function(image1, image2, segmentation1, segmentation2, tracking_point1, tracking_point2, tracking_pos_emb,
-    #                                 input_height, input_width, resize_flow_to_img_res, infer_occlusion, frame_index)
-
-  # @tf.function
-  # def batch_infer(self,
-  #                 images,
-  #                 segmentations,
-  #                 input_height=None,
-  #                 input_width=None,
-  #                 resize_flow_to_img_res=True,
-  #                 infer_occlusion=False):
-  #
-  #   return self.batch_infer_no_tf_function(images, segmentations, input_height, input_width,
-  #                                          resize_flow_to_img_res,
-  #                                          infer_occlusion)
-
-  def infer_occlusion(self, flow_forward, flow_backward):
-    """Gets a 'soft' occlusion mask from the forward and backward flow."""
-
-    flows = {
-        (0, 1, 'inference'): [flow_forward],
-        (1, 0, 'inference'): [flow_backward],
-    }
-    warps, valid_warp_masks, range_maps_low_res, occlusion_masks, _, _ = uflow_utils.compute_warps_and_occlusion(
-        flows,
-        self._occlusion_estimation,
-        self._occ_weights,
-        self._occ_thresholds,
-        self._occ_clip_max,
-        occlusions_are_zeros=False)
-
-
-    warps = warps[(0, 1, 'inference')][0]
-    valid_warp_masks = valid_warp_masks[(0, 1, 'inference')][0]
-    occlusion_mask_forward = occlusion_masks[(0, 1, 'inference')][0]
-    range_maps_low_res = range_maps_low_res[(0, 1, 'inference')][0]
-
-    return warps, valid_warp_masks, range_maps_low_res, occlusion_mask_forward
-
-  def features_no_tf_function(self, image1, image2):
-    """Runs the feature extractor portion of the model on image1 and image2."""
-    images = tf.stack([image1, image2])
-    # noinspection PyCallingNonCallable
-    return self._feature_model(images, split_features_by_sample=True)
-
-  @tf.function
-  def features(self, image1, image2):
-    """Runs the feature extractor portion of the model on image1 and image2."""
-    return self.features_no_tf_function(image1, image2)
 
   # -----------------------------------------------------------------------------------------------
 
@@ -605,7 +403,7 @@ class ContourFlow(object):
 
     return losses, saved_offset_dict
 
-  # @tf.function
+  @tf.function
   def train_step(self,
                  batch,
                  current_epoch,
@@ -805,25 +603,6 @@ class ContourFlow(object):
       variables.
     """
 
-    # with tf.GradientTape() as tape:
-    #   losses = self.compute_loss(
-    #       batch,
-    #       weights,
-    #       plot_dir,
-    #       distance_metrics=distance_metrics,
-    #       ground_truth_flow=ground_truth_flow,
-    #       ground_truth_valid=ground_truth_valid,
-    #       ground_truth_occlusions=ground_truth_occlusions,
-    #       ground_truth_segmentations=ground_truth_segmentations,
-    #       ground_truth_tracking_points=ground_truth_tracking_points,
-    #       images_without_photo_aug=images_without_photo_aug,
-    #       occ_active=occ_active)
-    #
-    # variables = (
-    #     self._feature_model.trainable_variables +
-    #     self._flow_model.trainable_variables)
-    # grads = tape.gradient(losses['total-loss'], variables)
-
     # This is where to add the tracking model
     with tf.GradientTape() as tape:
       losses, saved_offset_dict = self.compute_loss_tracking(batch,
@@ -860,187 +639,41 @@ class ContourFlow(object):
       cur_patch = batch[:, 1, :, :, :]
 
       # -------------------- To remove negative padding -------------------
-      # prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:, :, 0], -0.1)
-      # cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:, :, 0], -0.1)
+      prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:, :, 0], -0.1)
+      cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:, :, 0], -0.1)
 
-      # get the biggest value in the tensor
-      # prev_seg_points_limit = tf.math.reduce_max(prev_seg_points_limit)
-      # cur_seg_points_limit = tf.math.reduce_max(cur_seg_points_limit)
-      # -------------------------------------------------------------------
-      # find dense correspondence of all segmentation points, whereas gt id assignments are for a subset of points
-      # TODO: generate uniform numbers for each batch index instead of repeating 
-      source_sampled_contour_index = tf.random.uniform(shape=[10], maxval=prev_seg_points.shape[1], dtype=tf.float32, seed=10)
-      source_sampled_contour_index = tf.cast(source_sampled_contour_index, dtype=tf.int32)
-      import pdb;pdb.set_trace()
+      # ------------------------- Compute Forward and backward occupancy ------------------------------------------
+      sampled_prev_contour_indices = implicit_utils.sample_initial_points(prev_seg_points, prev_seg_points_limit)
+      sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)  # Problem: only uses discrete representation of the image
+      
+      # first contour to second contour
+      closest_cur_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+      occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, sampled_prev_contour_indices, closest_cur_sampled_contour_indices)
+      predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, closest_cur_sampled_contour_indices)
+      
+      # second contour to first contour
+      closest_prev_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(predicted_cur_contour_indices, cur_seg_points, prev_seg_points)
+      occ_contour_backward = self._tracking_model(cur_patch, prev_patch, cur_seg_points, prev_seg_points, pos_emb, predicted_cur_contour_indices, closest_prev_sampled_contour_indices)
+      predicted_prev_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_backward, closest_prev_sampled_contour_indices)
+      
+      # first contour to second contour
+      closest_new_cur_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points)
+      occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, predicted_prev_contour_indices, closest_new_cur_sampled_contour_indices)
 
-      tracking_utils.get_closest_contour_id(prev_seg_points[:,source_sampled_contour_index,:2], None, cur_seg_points[:,:,:2])
-      # get 10 nearby target points for each source point 
-      target_sampled_contour_index = tf.random.uniform(shape=[100], maxval=cur_seg_points.shape[1], dtype=tf.float32, seed=10)
-      cycle_source_sampled_contour_index = tf.random.uniform(shape=[100], maxval=prev_seg_points.shape[1], dtype=tf.float32, seed=10)
+      prev_gt_occ = implicit_utils.create_GT_occupnacy(sampled_prev_contour_indices, prev_seg_points.shape[:2], closest_prev_sampled_contour_indices)   # create GT occupancy on previous contour
+      backward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(prev_gt_occ, occ_contour_backward)
 
-      occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, source_sampled_contour_index, target_sampled_contour_index)
-      occ_contour_backward = self._tracking_model(cur_patch, prev_patch, cur_seg_points, prev_seg_points, pos_emb, target_sampled_contour_index, cycle_source_sampled_contour_index)
+      cur_gt_occ = implicit_utils.create_GT_occupnacy(predicted_cur_contour_indices, cur_seg_points.shape[:2], closest_new_cur_sampled_contour_indices)   # create GT occupancy on current contour
+      forward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(cur_gt_occ, occ_contour_forward)
+      # ----------------------------------------------------------------------------------------------------------
 
-      # forward_corr_2d_loss = tracking_utils.corr_2d_loss( gt_prev_id_assignments, gt_cur_id_assignments, forward_corr_2d_matrix)
-      # backward_corr_2d_loss = tracking_utils.corr_2d_loss( gt_cur_id_assignments, gt_prev_id_assignments, backward_corr_2d_matrix)
-      # corr_cycle_consistency_loss = tracking_utils.corr_cycle_consistency(forward_corr_2d_matrix, backward_corr_2d_matrix)
+      saved_offset_dict = {0: 0}  # key for sequence number, only one key 0 if seq_num=2
 
-      # process forward_id_assign by contour length
-      # prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:, :, 0], -0.1)
-      # cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:, :, 0], -0.1)
-      # forward_id_assign = tracking_utils.fit_id_assignments_to_next_contour(forward_id_assign, tf.expand_dims(prev_seg_points[:,:,-1], axis=-1), cur_seg_points_limit)
-      # backward_id_assign = tracking_utils.fit_id_assignments_to_next_contour(backward_id_assign, tf.expand_dims(cur_seg_points[:,:,-1], axis=-1), prev_seg_points_limit)
-
-      # total_forward_matching_points_loss = tracking_utils.matching_contour_points_loss(gt_prev_id_assignments, gt_cur_id_assignments, forward_id_assign)
-      # total_backward_matching_points_loss = tracking_utils.matching_contour_points_loss(gt_cur_id_assignments, gt_prev_id_assignments, backward_id_assign)
-      # total_cycle_consistency_assign_loss = tracking_utils.cycle_consistency_assign_loss(forward_id_assign, backward_id_assign, tf.expand_dims(prev_seg_points[:,:,-1], axis=-1),  tf.expand_dims(cur_seg_points[:,:,-1], axis=-1))
-      # total_points_order_loss = tracking_utils.contour_points_order_loss(forward_id_assign)
-
-      # total_forward_matching_points_spatial_metric = tracking_utils.matching_contour_points_spatial_metric(cur_seg_points[:,:,:2], gt_prev_id_assignments, gt_cur_id_assignments, forward_id_assign)
-      pred_cur_tracking_points = prev_seg_points[:,:,:2] + forward_spatial_offset
-      forward_spatial_points_loss = tracking_utils.matching_spatial_points_loss(gt_prev_id_assignments, gt_cur_id_assignments,
-                                                                                      tf.cast(cur_seg_points[:,:,:2], dtype=pred_cur_tracking_points.dtype), pred_cur_tracking_points)
-
-      cycle_consistency_spatial_loss = tracking_utils.cycle_consistency_spatial_loss(prev_seg_points[:,:,:2], prev_seg_points[:,:,-1], cur_seg_points[:,:,:2], cur_seg_points[:,:,-1], forward_spatial_offset, backward_spatial_offset)
-
-      forward_tracker_photometric_loss = tracking_utils.tracker_unsupervised_photometric_loss(prev_patch, cur_patch, prev_seg_points[:,:,:2], prev_seg_points[:,:,-1], pred_cur_tracking_points)
-
-      backward_tracker_photometric_loss = tracking_utils.tracker_unsupervised_photometric_loss(cur_patch, prev_patch, cur_seg_points[:,:,:2], cur_seg_points[:,:,-1], cur_seg_points[:,:,:2] + backward_spatial_offset)
-
-      # forward_tracker_census_loss = tracking_utils.tracker_unsupervised_census_loss(prev_patch, cur_patch, prev_seg_points[:,:,:2], prev_seg_points[:,:,-1], pred_cur_tracking_points)
-
-      # backward_tracker_census_loss = tracking_utils.tracker_unsupervised_census_loss(cur_patch, prev_patch, cur_seg_points[:,:,:2], cur_seg_points[:,:,-1], cur_seg_points[:,:,:2] + backward_spatial_offset)
-
-      forward_linear_spring_loss, forward_normal_force_loss = tracking_utils.mechanical_loss_from_offsets(prev_seg_points[:,:,:2], prev_seg_points[:,:,-1], forward_spatial_offset)
-      backward_linear_spring_loss, backward_normal_force_loss = tracking_utils.mechanical_loss_from_offsets(cur_seg_points[:,:,:2], cur_seg_points[:,:,-1], backward_spatial_offset)
-
-      # snake_tension_loss, snake_stiffness_loss = tracking_utils.snake_loss_from_offsets(prev_seg_points[:,:,:2], prev_seg_points[:,:,-1], forward_spatial_offset)
-
-      saved_offset_dict = {0: saved_offset}  # key for sequence number, only one key 0 if seq_num=2
-
-      total_loss = cycle_consistency_spatial_loss + forward_normal_force_loss
+      total_loss = backward_occ_cycle_consistency_loss + forward_occ_cycle_consistency_loss
+      # tf.print("total_loss", total_loss, backward_occ_cycle_consistency_loss, forward_occ_cycle_consistency_loss)
 
       losses = {'total-loss' : total_loss,
-                'forward_spatial_points_loss': forward_spatial_points_loss,
-                'forward_tracker_photometric_loss': forward_tracker_photometric_loss, 'backward_tracker_photometric_loss': backward_tracker_photometric_loss,
-                # 'forward_tracker_census_loss': forward_tracker_census_loss, 'backward_tracker_census_loss': backward_tracker_census_loss,
-                'cycle_consistency_spatial_loss': cycle_consistency_spatial_loss,
-                # 'snake_tension_loss': snake_tension_loss, 'snake_stiffness_loss': snake_stiffness_loss,
-                'forward_linear_spring_loss': forward_linear_spring_loss, 'forward_normal_force_loss': forward_normal_force_loss,
-                'backward_linear_spring_loss': backward_linear_spring_loss, 'backward_normal_force_loss': backward_normal_force_loss}
+                'backward_occ_cycle_consistency_loss': backward_occ_cycle_consistency_loss,
+                'forward_occ_cycle_consistency_loss': forward_occ_cycle_consistency_loss}
 
       return losses, saved_offset_dict
-
-  def compute_loss(self,
-                   batch,
-                   weights,
-                   plot_dir=None,
-                   distance_metrics=None,
-                   ground_truth_flow=None,
-                   ground_truth_valid=None,
-                   ground_truth_occlusions=None,
-                   ground_truth_segmentations=None,
-                   ground_truth_tracking_points=None,
-                   images_without_photo_aug=None,
-                   occ_active=None):
-    """Applies the model and computes losses for a batch of image sequences."""
-    # Compute only a supervised loss.
-    if self._train_with_supervision:
-      if ground_truth_flow is None:
-        raise ValueError('Need ground truth flow to compute supervised loss.')
-      flows = uflow_utils.compute_flow_for_supervised_loss(
-          self._feature_model, self._flow_model, batch=batch, training=True)
-      losses = uflow_utils.supervised_loss(weights, ground_truth_flow,
-                                           ground_truth_valid, flows)
-      losses = {key + '-loss': losses[key] for key in losses}
-      return losses
-
-    # Use possibly augmented images if non augmented version is not provided.
-    if images_without_photo_aug is None:
-      images_without_photo_aug = batch
-
-    flows, selfsup_transform_fns = uflow_utils.compute_features_and_flow(
-        self._feature_model,
-        self._flow_model,
-        batch=batch,
-        batch_without_aug=images_without_photo_aug,
-        training=True,
-        build_selfsup_transformations=self._build_selfsup_transformations,
-        teacher_feature_model=self._teacher_feature_model,
-        teacher_flow_model=self._teacher_flow_model,
-        teacher_image_version=self._teacher_image_version,
-        ground_truth_segmentations=ground_truth_segmentations,
-        ground_truth_tracking_points=ground_truth_tracking_points
-    )
-
-    # Prepare images and contours for unsupervised loss (prefer unaugmented images).
-    seq_len = int(batch.shape[1])
-    images = {i: images_without_photo_aug[:, i] for i in range(seq_len)}
-    contours = {i: ground_truth_segmentations[:, i] for i in range(seq_len)}
-
-    # Warp stuff and compute occlusion.
-    warps, valid_warp_masks, _, not_occluded_masks, fb_sq_diff, fb_sum_sq = uflow_utils.compute_warps_and_occlusion(
-                                                                            flows,
-                                                                            occlusion_estimation=self._occlusion_estimation,
-                                                                            occ_weights=self._occ_weights,
-                                                                            occ_thresholds=self._occ_thresholds,
-                                                                            occ_clip_max=self._occ_clip_max,
-                                                                            occlusions_are_zeros=True,
-                                                                            occ_active=occ_active)
-
-    # Warp images and features.
-    warped_images = uflow_utils.apply_warps_stop_grad(images, warps, level=0)
-
-    # Warp contours
-    assert len(images) == len(contours)
-
-    # dilate contours and get image at the contour regions
-    img_contours = {}
-    for dict_i in range(len(images)):
-        # img_contours[dict_i] = images[dict_i] * contours[dict_i]  # contour image without dilation
-
-        a_depth = contours[dict_i].shape[-1]
-        dilation_filter = tf.zeros( [1, 1, a_depth], tf.float32)  # why zeros? https://stackoverflow.com/questions/54686895/tensorflow-dilation-behave-differently-than-morphological-dilation
-        dilated_contour = tf.nn.dilation2d(input=contours[dict_i], filters=dilation_filter, strides=[1,1,1,1], padding='SAME', data_format='NHWC', dilations=[1, 1, 1, 1])
-        img_contours[dict_i] = images[dict_i] * dilated_contour
-
-        # debug whether images are loaded correctly for training
-        # cv2.imwrite(f'debug_dilated_contour.png', dilated_contour.numpy()[0, :, :, :])
-        # cv2.imwrite(f'debug_img_{dict_i}.png', images[dict_i].numpy()[0, :, :, :] * 255)
-        # cv2.imwrite(f'debug_contour_{dict_i}.png', contours[dict_i].numpy()[0,:,:,:])
-        # cv2.imwrite(f'debug_contour_img_{dict_i}.png', img_contours[dict_i].numpy()[0, :, :, :])
-        # print( tf.unique_with_counts(tf.reshape(dilated_contour, -1)) )
-
-    warped_contours = uflow_utils.apply_warps_stop_grad(img_contours, warps, level=0)
-
-    # cv2.imwrite(f'debug_warped_contour_0.png', warped_contours[(0, 1, 'original-teacher')].numpy()[0, :, :, :])
-    # cv2.imwrite(f'debug_warped_contour_1.png', warped_contours[(1, 0, 'original-teacher')].numpy()[0, :, :, :])
-    # import pdb; pdb.set_trace()
-
-    # Compute losses.
-    losses = uflow_utils.compute_loss(
-        weights=weights,
-        images=images,
-        contours=img_contours,
-        flows=flows,
-        warps=warps,
-        valid_warp_masks=valid_warp_masks,
-        not_occluded_masks=not_occluded_masks,
-        fb_sq_diff=fb_sq_diff,
-        fb_sum_sq=fb_sum_sq,
-        warped_images=warped_images,
-        warped_contours=warped_contours,
-        only_forward=self._only_forward,
-        selfsup_transform_fns=selfsup_transform_fns,
-        fb_sigma_teacher=self._fb_sigma_teacher,
-        fb_sigma_student=self._fb_sigma_student,
-        plot_dir=plot_dir,
-        distance_metrics=distance_metrics,
-        smoothness_edge_weighting=self._smoothness_edge_weighting,
-        stop_gradient_mask=self._stop_gradient_mask,
-        selfsup_mask=self._selfsup_mask,
-        ground_truth_occlusions=ground_truth_occlusions,
-        smoothness_at_level=self._smoothness_at_level)
-    losses = {key + '-loss': losses[key] for key in losses}
-
-    return losses

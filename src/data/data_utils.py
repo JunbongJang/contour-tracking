@@ -37,6 +37,7 @@ from src import uflow_plotting
 from src import uflow_utils
 from src import metrics
 from datetime import datetime
+from src import implicit_utils
 
 
 def parse_data(proto,
@@ -273,23 +274,12 @@ def predict(
   inference_times = []
   list_of_sa_at_thresholds = {0.02:[], 0.04:[], 0.06:[]}
   list_of_ca_at_thresholds = {0.01:[], 0.02:[], 0.03:[]}
-  list_of_rsa = []
-  list_of_ta = []
-  list_of_baseline_f_measure = []
 
   list_of_points_spatial_accuracy = []
   list_of_delta_along_normal_vector = []
 
-  list_of_corr_2d_loss = []
-  list_of_matching_points_loss = []
-  list_of_cycle_consistency_assign_loss = []
-  list_of_spatial_points_loss = []
-  list_of_cycle_consistency_spatial_loss = []
-  list_of_forward_matching_points_spatial_metric = []
-  list_of_forward_tracker_photometric_loss = []
-  list_of_backward_tracker_photometric_loss = []
-  list_of_linear_spring_force_loss = []
-  list_of_normal_tendancy_force_loss = []
+  list_of_forward_occ_cycle_consistency_loss = []
+  list_of_backward_occ_cycle_consistency_loss = []
 
   plot_count = 0
   eval_count = -1
@@ -349,6 +339,7 @@ def predict(
             # pred_tracking_points = tf.constant([[[100.0, 100.0], [110.0, 110.0], [120.0, 120.0], [130.0, 130.0], [140.0, 140.0], [150.0, 150.0], [160.0, 160.0]]])
             pred_tracking_points = tf.expand_dims(tracking_points_batch[0], axis=0)
 
+        # refer to infer() in contour_flow_net.py
         f = lambda: inference_fn(
             image_batch[0],
             image_batch[1],
@@ -363,7 +354,7 @@ def predict(
             infer_occlusion=True)
 
     # for contour tracking point
-    inference_time_in_ms, (forward_spatial_offset, backward_spatial_offset, tracking_pos_emb, resized_height, resized_width) = uflow_utils.time_it(f, execute_once_before=eval_count == 1)
+    inference_time_in_ms, (forward_occ_cycle_consistency_loss, backward_occ_cycle_consistency_loss, predicted_cur_contour_indices_tensor, tracking_pos_emb, resized_height, resized_width) = uflow_utils.time_it(f, execute_once_before=eval_count == 1)
     inference_times.append(inference_time_in_ms)
 
     # ---------------------- process forward_id_assign by contour length ----------------------
@@ -372,51 +363,18 @@ def predict(
     prev_seg_points_mask = tf.expand_dims(seg_points_batch[0, :, -1], axis=0)
     cur_seg_points_mask = tf.expand_dims(seg_points_batch[1, :, -1], axis=0)
 
-    # prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
-    # cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
-    # forward_id_assign = tracking_utils.fit_id_assignments_to_next_contour(forward_id_assign, tf.expand_dims(seg_points_batch[:,:,-1], axis=-1), cur_seg_points_limit)
-    # backward_id_assign = tracking_utils.fit_id_assignments_to_next_contour(backward_id_assign, tf.expand_dims(seg_points_batch[:,:,-1], axis=-1), prev_seg_points_limit)
+    prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
+    cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
+    
     # ----------------------
 
-    pred_back_spatial_tracking_points = cur_seg_points + backward_spatial_offset
-    pred_spatial_tracking_points = prev_seg_points + forward_spatial_offset
+    # pred_back_spatial_tracking_points = cur_seg_points + backward_spatial_offset
+    # pred_spatial_tracking_points = prev_seg_points + forward_spatial_offset
     # ----------------------- Metrics -----------------------
     if evaluate_bool:  # evaluation on validation set during training
         # perform validation for every epoch
-        gt_prev_id_assignments = tf.expand_dims( tracking_points_batch[0], axis=0)
-        gt_cur_id_assignments = tf.expand_dims( tracking_points_batch[1], axis=0)
-
-        # corr_2d_loss = tracking_utils.corr_2d_loss(gt_prev_id_assignments, gt_cur_id_assignments, corr_2d_matrix)
-
-        # matching_points_loss = tracking_utils.matching_contour_points_loss(gt_prev_id_assignments, gt_cur_id_assignments, forward_id_assign)
-
-        # cycle_consistency_assign_loss = tracking_utils.cycle_consistency_assign_loss(forward_id_assign, backward_id_assign, tf.expand_dims(prev_seg_points[:,:,-1], axis=-1),  tf.expand_dims(cur_seg_points[:,:,-1], axis=-1))
-
-        spatial_points_loss = tracking_utils.matching_spatial_points_loss( gt_prev_id_assignments, gt_cur_id_assignments, cur_seg_points, pred_spatial_tracking_points)
-
-        cycle_consistency_spatial_loss = tracking_utils.cycle_consistency_spatial_loss(prev_seg_points, prev_seg_points_mask, cur_seg_points, cur_seg_points_mask, forward_spatial_offset, backward_spatial_offset)
-
-        # forward_matching_points_spatial_metric = tracking_utils.matching_contour_points_spatial_metric(cur_seg_points,
-        #                                                                                                  gt_prev_id_assignments,
-        #                                                                                                  gt_cur_id_assignments, forward_id_assign)
-
-        forward_tracker_photometric_loss = tracking_utils.tracker_unsupervised_photometric_loss(tf.expand_dims(image_batch[0], axis=0), tf.expand_dims(image_batch[1], axis=0), prev_seg_points, prev_seg_points_mask, pred_spatial_tracking_points)
-
-        backward_tracker_photometric_loss = tracking_utils.tracker_unsupervised_photometric_loss(tf.expand_dims(image_batch[1], axis=0), tf.expand_dims(image_batch[0], axis=0), cur_seg_points, cur_seg_points_mask, cur_seg_points + backward_spatial_offset)
-
-        linear_spring_force_loss, normal_tendancy_force_loss = tracking_utils.mechanical_loss_from_offsets(prev_seg_points, prev_seg_points_mask, forward_spatial_offset)
-
-
-        # list_of_corr_2d_loss.append(corr_2d_loss)
-        # list_of_matching_points_loss.append(matching_points_loss)
-        # list_of_cycle_consistency_assign_loss.append(cycle_consistency_assign_loss)
-        list_of_spatial_points_loss.append(spatial_points_loss)
-        list_of_cycle_consistency_spatial_loss.append(cycle_consistency_spatial_loss)
-        # list_of_forward_matching_points_spatial_metric.append(forward_matching_points_spatial_metric)
-        list_of_forward_tracker_photometric_loss.append(forward_tracker_photometric_loss)
-        list_of_backward_tracker_photometric_loss.append(backward_tracker_photometric_loss)
-        list_of_linear_spring_force_loss.append(linear_spring_force_loss)
-        list_of_normal_tendancy_force_loss.append(normal_tendancy_force_loss)
+        list_of_forward_occ_cycle_consistency_loss.append(forward_occ_cycle_consistency_loss)
+        list_of_backward_occ_cycle_consistency_loss.append(backward_occ_cycle_consistency_loss)
 
     else:  # prediction on test set after training
         # convert id_assign to x,y points in image space
@@ -424,107 +382,19 @@ def predict(
         id_assign2 = tracking_points_batch[1].numpy()
         seg_point1 = seg_points_batch[0].numpy()
         seg_point2 = seg_points_batch[1].numpy()
+        pred_cur_contour_indices = predicted_cur_contour_indices_tensor[0].numpy()
+
         gt_tracking_points = seg_point2[id_assign2[:, 0], :2]  # index 0 to remove the last dimension
-        gt_prev_tracking_points = seg_point1[id_assign1[:, 0], :2]  # index 0 to remove the last dimension
 
-        # Case1: use previous pred_id_assign predicted by the model as the initial points
-        # ------------------------------------------------------------------
-        # old method that get pred_id_assign by ID regression
-        # pred_id_assign = forward_id_assign[0].numpy()
-        # pred_id_assign = np.expand_dims(pred_id_assign, axis=0)
-        # if prev_id_assign is None:  # If this is the first frame, use the GT points in id_assign1
-        #     sampled_pred_id_assign = tracking_utils.sample_data_by_index(np.expand_dims(id_assign1, axis=0), pred_id_assign)
-        # else:
-        #     sampled_pred_id_assign = tracking_utils.sample_data_by_index(np.expand_dims(prev_id_assign, axis=0), pred_id_assign)
-        # ------------------------------------------------------------------
-        # new method that get pred_id_assign from corr_2d_matrix
-        # if prev_id_assign is None:  # If this is the first frame, use the GT points in id_assign1
-        #     sampled_corr_2d_matrix = tracking_utils.sample_data_by_index(np.expand_dims(id_assign1, axis=0), corr_2d_matrix) # (B, num_track_points, num_seg_points2)
-        # else:
-        #     sampled_corr_2d_matrix = tracking_utils.sample_data_by_index(np.expand_dims(prev_id_assign, axis=0), corr_2d_matrix)  # (B, num_track_points, num_seg_points2)
-        # sampled_pred_id_assign = tf.math.argmax(sampled_corr_2d_matrix, axis=-1)  # (B, num_track_points)
-        # sampled_pred_id_assign = np.expand_dims(sampled_pred_id_assign, axis=-1)  # (B, num_track_points, 1)
-        # # ---------------------------------------------
-        # sampled_pred_id_assign = np.round(sampled_pred_id_assign[0]).astype(np.int32)
-        # prev_id_assign = sampled_pred_id_assign
-        #
-        # # remove any big id
-        # if (sampled_pred_id_assign >= seg_point2.shape[0]).any():
-        #     sampled_pred_id_assign[sampled_pred_id_assign >= seg_point2.shape[0]] = seg_point2.shape[0] - 1
-        # pred_tracking_points = seg_point2[sampled_pred_id_assign[:, 0], :2]
-
-        #---------------------------------Case 1 Ends ---------------------------------------------
-        # Case2: use x,y coordinate of tracked point
-
-        # For backward contour tracking
-        # gt_tracking_points = seg_point1[id_assign1[:, 0], :2]  # index 0 to remove the last dimension
-        # gt_prev_tracking_points = seg_point2[id_assign2[:, 0], :2]  # index 0 to remove the last dimension
-        #
-        # if prev_id_assign is None:  # If this is the first frame, use the GT points in id_assign1
-        #     my_pred_tracking_points = tracking_utils.sample_data_by_index(tf.expand_dims(id_assign2[:, 0], axis=0), pred_back_spatial_tracking_points)
-        #     my_overfit_pred_tracking_points = my_pred_tracking_points
-        # else:
-        #     my_pred_tracking_points = tracking_utils.sample_data_by_index(tf.expand_dims(prev_id_assign[:, 0], axis=0), pred_back_spatial_tracking_points)
-        #     my_overfit_pred_tracking_points = tracking_utils.sample_data_by_index( tf.expand_dims(id_assign1[:, 0], axis=0), pred_back_spatial_tracking_points)
-        #
-        # def get_closest_contour_id(my_pred_tracking_points, seg_points):
-        #     # This operation is referred to as phi in the manuscript
-        #     cur_id_assign_list = []
-        #     for a_point_index in range(my_pred_tracking_points.shape[1]):
-        #         temp_contour_points = tf.expand_dims(seg_points[:,:2], axis=0)
-        #         temp_pred_tracking_points = tf.expand_dims(my_pred_tracking_points[:,a_point_index,:], axis=1)
-        #         diff_dist = temp_contour_points - temp_pred_tracking_points
-        #         l2_dist = tf.math.reduce_euclidean_norm(diff_dist, axis=-1)
-        #         cur_id_assign = tf.math.argmin( l2_dist, axis=1)  # shape (num_gt_points, 1) and dtype int32
-        #         cur_id_assign_list.append(cur_id_assign.numpy()[0])
-        #     np_cur_id_assign = np.expand_dims(np.asarray(cur_id_assign_list, dtype=np.int32), axis=-1)
-        #
-        #     return np_cur_id_assign
-        #
-        # # use the closest contour id to get the pred_tracking_points
-        # np_cur_id_assign = get_closest_contour_id(my_pred_tracking_points, seg_point1)
-        # pred_tracking_points = seg_point1[np_cur_id_assign[:, 0], :2]
-        # prev_id_assign = np_cur_id_assign
-        #
-        # np_overfit_cur_id_assign = get_closest_contour_id(my_overfit_pred_tracking_points, seg_point1)
-        # overfit_pred_tracking_points = seg_point1[np_overfit_cur_id_assign[:, 0], :2]
-        #
-        # # Dense offset figure for manuscript
-        # np_all_cur_id_assign = get_closest_contour_id(pred_back_spatial_tracking_points, seg_point1) # shape is (1640, 1)
-
-        # -----------------------------------------------------------------------------------------
         # For Forward contour tracking
         if prev_id_assign is None:  # If this is the first frame, use the GT points in id_assign1
-            my_pred_tracking_points = tracking_utils.sample_data_by_index(tf.expand_dims(id_assign1[:, 0], axis=0), pred_spatial_tracking_points)
-            my_overfit_pred_tracking_points = my_pred_tracking_points
+          np_cur_id_assign = pred_cur_contour_indices[id_assign1[:, 0]]
         else:
-            my_pred_tracking_points = tracking_utils.sample_data_by_index(tf.expand_dims(prev_id_assign[:, 0], axis=0), pred_spatial_tracking_points)
-            my_overfit_pred_tracking_points = tracking_utils.sample_data_by_index( tf.expand_dims(id_assign1[:, 0], axis=0), pred_spatial_tracking_points)
-
-        def get_closest_contour_id(my_pred_tracking_points, seg_points):
-            # This operation is referred to as phi in the manuscript
-            cur_id_assign_list = []
-            for a_point_index in range(my_pred_tracking_points.shape[1]):
-                temp_contour_points = tf.expand_dims(seg_points[:,:2], axis=0)
-                temp_pred_tracking_points = tf.expand_dims(my_pred_tracking_points[:,a_point_index,:], axis=1)
-                diff_dist = temp_contour_points - temp_pred_tracking_points
-                l2_dist = tf.math.reduce_euclidean_norm(diff_dist, axis=-1)
-                cur_id_assign = tf.math.argmin( l2_dist, axis=1)  # shape (num_gt_points, 1) and dtype int32
-                cur_id_assign_list.append(cur_id_assign.numpy()[0])
-            np_cur_id_assign = np.expand_dims(np.asarray(cur_id_assign_list, dtype=np.int32), axis=-1)
-
-            return np_cur_id_assign
+          np_cur_id_assign = pred_cur_contour_indices[prev_id_assign]
 
         # use the closest contour id to get the pred_tracking_points
-        np_cur_id_assign = get_closest_contour_id(my_pred_tracking_points, seg_point2)
-        pred_tracking_points = seg_point2[np_cur_id_assign[:, 0], :2]
+        pred_tracking_points = seg_point2[np_cur_id_assign, :2]
         prev_id_assign = np_cur_id_assign
-
-        np_overfit_cur_id_assign = get_closest_contour_id(my_overfit_pred_tracking_points, seg_point2)
-        overfit_pred_tracking_points = seg_point2[np_overfit_cur_id_assign[:, 0], :2]
-
-        # Dense offset figure for manuscript
-        np_all_cur_id_assign = get_closest_contour_id(pred_spatial_tracking_points, seg_point2) # shape is (1640, 1)
 
         # ------------------------- get normal vectors -------------------------
         def get_protrusion_along_normal_vector(prev_contour_points, cur_contour_points, id_assign1, np_cur_id_assign):
@@ -541,7 +411,6 @@ def predict(
             delta_along_normal_vector_list = []
             for prev_contour_point_index, cur_contour_point_index in zip(id_assign1, np_cur_id_assign):
                 prev_contour_point_index = prev_contour_point_index[0]
-                cur_contour_point_index = cur_contour_point_index[0]
                 cur_contour_point = cur_contour_points[cur_contour_point_index]
                 cur_x, cur_y, cur_mask = cur_contour_point[0], cur_contour_point[1], cur_contour_point[2]
                 prev_contour_point = prev_contour_points[prev_contour_point_index]
@@ -585,15 +454,15 @@ def predict(
                                                frame_skip=None)
 
           # Dense correspondence figure for manuscript
-          uflow_plotting.save_tracked_contour_indices(save_dir, plot_count, num_plots, np_all_cur_id_assign[:,0])
-          uflow_plotting.predict_tracking_plot_manuscript(save_dir,
-                                                          plot_count,
-                                                          image_batch[0].numpy(),
-                                                          image_batch[1].numpy(),
-                                                          seg_points_batch[0].numpy(),
-                                                          seg_points_batch[1].numpy(),
-                                                          pred_spatial_tracking_points[0],
-                                                          num_plots)
+          # uflow_plotting.save_tracked_contour_indices(save_dir, plot_count, num_plots, np_all_cur_id_assign[:,0])
+          # uflow_plotting.predict_tracking_plot_manuscript(save_dir,
+          #                                                 plot_count,
+          #                                                 image_batch[0].numpy(),
+          #                                                 image_batch[1].numpy(),
+          #                                                 seg_points_batch[0].numpy(),
+          #                                                 seg_points_batch[1].numpy(),
+          #                                                 pred_spatial_tracking_points[0],
+          #                                                 num_plots)
 
         # ---------------- Evaluate F Metric, warp error, and spatial accuracy ------------------
         image_height, image_width = image_batch.shape[1:3]
@@ -616,56 +485,8 @@ def predict(
             total_contour_length = np.where(seg_point2[:,2] == 0)[0][0]
         
         for ca_thershold in list_of_ca_at_thresholds.keys():
-          a_contour_accuracy = metrics.contour_accuracy(id_assign2[:, 0], np_cur_id_assign[:, 0], total_contour_length, thresh=ca_thershold)
+          a_contour_accuracy = metrics.contour_accuracy(id_assign2[:, 0], np_cur_id_assign, total_contour_length, thresh=ca_thershold)
           list_of_ca_at_thresholds[ca_thershold].append(a_contour_accuracy)
-
-
-        # rsa_threshold = 0.01
-        # pred_prev_tracking_points = seg_point1[prev_id_assign[:, 0], :2]
-        # a_relative_spatial_accuracy = metrics.relative_spatial_accuracy(gt_tracking_points, overfit_pred_tracking_points, gt_prev_tracking_points, gt_prev_tracking_points, image_width, image_height, rsa_threshold)
-        # list_of_rsa.append(a_relative_spatial_accuracy)
-
-        # a_temporal_accuracy = metrics.temporal_accuracy(gt_tracking_points, pred_tracking_points,
-        #                                                                 gt_prev_tracking_points,
-        #                                                                 pred_prev_tracking_points, image_width,
-        #                                                                 image_height, spatial_accuracy_threshold)
-        # list_of_ta.append(a_temporal_accuracy)
-
-
-        # ------------------------------------- for optical flow -------------------------------------
-        # inference_time_in_ms, (flow, warps, valid_warp_masks, soft_occlusion_mask, range_map) = uflow_utils.time_it(f, execute_once_before=eval_count == 1)
-        # inference_times.append(inference_time_in_ms)
-        #
-        # best_thresh = .5
-        # if plot_dir and plot_count < num_plots:
-        #   plot_count += 1
-        #   mask_thresh = tf.cast(
-        #       tf.math.greater(soft_occlusion_mask, best_thresh), tf.float32)
-        #   warped_contour1, tracking_points = uflow_plotting.predict_plot(plot_dir,
-        #                            plot_count,
-        #                            image_batch[0].numpy(),
-        #                            image_batch[1].numpy(),
-        #                            segmentation_batch[0].numpy(),
-        #                            segmentation_batch[1].numpy(),
-        #                            tracking_points_batch[0].numpy(),
-        #                            tracking_points_batch[1].numpy(),
-        #                            flow.numpy(),
-        #                            1. - mask_thresh.numpy(),
-        #                            range_map.numpy(),
-        #                            warps.numpy(),
-        #                            valid_warp_masks.numpy(),
-        #                            num_plots,
-        #                            frame_skip=None)
-        #
-        #   # ---------------- Evaluate F Metric, warp error, and spatial accuracy ------------------
-        #   f_value, precision, recall = metrics.f_measure(warped_contour1[:,:,0], segmentation_batch[0].numpy()[:,:,0])
-        #   a_warp_error = metrics.get_warp_error(warped_contour1[:,:,0], segmentation_batch[0].numpy()[:,:,0])
-        #   a_spatial_accuracy = metrics.spatial_accuracy(tracking_points_batch[0].numpy(), tracking_points[plot_count], thresh=1)
-        #   list_of_results.append((f_value, precision, recall, np.sum(a_warp_error), a_spatial_accuracy))
-        #
-        #   # ---------------- Evaluate for baseline --------------
-        #   baseline_f_value, baseline_precision, baseline_recall = metrics.f_measure(segmentation_batch[0].numpy()[:,:,0], segmentation_batch[1].numpy()[:,:,0])
-        #   list_of_baseline_f_measure.append((baseline_f_value, baseline_precision, baseline_recall))
 
   if progress_bar:
     sys.stdout.write('\n')
@@ -675,18 +496,10 @@ def predict(
       # For Training, evaluate on validation
       eval_stop_in_s = time.time()
       results = {
-          # 'val_corr_2d_loss': my_tf_round(tf.math.reduce_mean(list_of_corr_2d_loss), 4).numpy(),
-          # 'val_matching_points_loss': my_tf_round(tf.math.reduce_mean(list_of_matching_points_loss), 4).numpy(),
-          # 'val_cycle_consistency_assign_loss': my_tf_round(tf.math.reduce_mean(list_of_cycle_consistency_assign_loss), 4).numpy(),
-          'val_spatial_points_loss': my_tf_round(tf.math.reduce_mean(list_of_spatial_points_loss), 4).numpy(),
-          'val_cycle_consistency_spatial_loss': my_tf_round(tf.math.reduce_mean(list_of_cycle_consistency_spatial_loss), 4).numpy(),
-          # 'val_matching_points_spatial_metric': my_tf_round(tf.math.reduce_mean(list_of_forward_matching_points_spatial_metric), 4).numpy(),
-          'val_forward_tracker_photometric_loss': my_tf_round(tf.math.reduce_mean(list_of_forward_tracker_photometric_loss), 4).numpy(),
-          'val_backward_tracker_photometric_loss': my_tf_round(tf.math.reduce_mean(list_of_backward_tracker_photometric_loss), 4).numpy(),
-          'val_linear_spring_force_loss': my_tf_round(tf.math.reduce_mean(list_of_linear_spring_force_loss), 4).numpy(),
-          'val_normal_tendancy_force_loss': my_tf_round(tf.math.reduce_mean(list_of_normal_tendancy_force_loss), 4).numpy(),
-          # 'val-inf-time(ms)': np.mean(inference_times),
-          # 'val-eval-time(s)': eval_stop_in_s - eval_start_in_s
+          'val_backward_occ_cycle_consistency_loss': my_tf_round(tf.math.reduce_mean(list_of_backward_occ_cycle_consistency_loss), 4).numpy(),
+          'val_forward_occ_cycle_consistency_loss': my_tf_round(tf.math.reduce_mean(list_of_forward_occ_cycle_consistency_loss), 4).numpy(),
+          'val-inf-time(ms)': np.mean(inference_times),
+          'val-eval-time(s)': eval_stop_in_s - eval_start_in_s
       }
       return results
 
@@ -718,7 +531,6 @@ def predict(
           print(save_dict, file=f)
 
       # save_eval_results(list_of_results, plot_dir, 'eval_results')
-      # save_eval_results(list_of_baseline_f_measure, plot_dir, 'baseline_eval_results')
 
       eval_stop_in_s = time.time()
       print('---------------------------------------')

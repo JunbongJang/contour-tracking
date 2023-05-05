@@ -80,11 +80,12 @@ def log_to_tensorboard(summary_writer, log, saved_offset_dict, epoch=None, mean_
         for key in sorted(log):
             tf.summary.scalar(key, np.mean(log[key][-mean_over_num_steps:]), step=epoch)
 
-        with tf.name_scope("saved_offset_dict"):
-            for seq_key in saved_offset_dict.keys():
-                for layer_key in saved_offset_dict[seq_key].keys():
-                    a_string_tensor = tf.strings.as_string(saved_offset_dict[seq_key][layer_key])
-                    tf.summary.text(f"seq_pair {seq_key}, layer {layer_key}:", a_string_tensor, step=epoch)
+        # TODO uncomment this
+        # with tf.name_scope("saved_offset_dict"):
+        #     for seq_key in saved_offset_dict.keys():
+        #         for layer_key in saved_offset_dict[seq_key].keys():
+        #             a_string_tensor = tf.strings.as_string(saved_offset_dict[seq_key][layer_key])
+        #             tf.summary.text(f"seq_pair {seq_key}, layer {layer_key}:", a_string_tensor, step=epoch)
 
 def save_and_close(filename):
   """Save figures."""

@@ -22,7 +22,6 @@ import tensorflow as tf
 
 from src.data import data_utils
 # pylint:disable=unused-import
-from src.data.data_utils import predict, list_eval_keys
 
 
 def make_dataset(path,

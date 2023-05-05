@@ -216,16 +216,12 @@ class LocalAlignment(tf.keras.Model):
         # ----------------------
         # compute 2d Correlation matrix [B, num_seg_points, num_seg_points] <-- [B, num_seg_points, 132] * [B, num_seg_points, 132]
         corr_2d_matrix = tf.einsum('bic,bjc->bij', forward_cross_attn, backward_cross_attn)
-        occ_out = self.MLP_score(corr_2d_matrix, source_sampled_contour_index, target_sampled_contour_index)
-
-        # make values along last dimension sum to one
-        # softmax_corr_2d_matrix = tf.nn.softmax(corr_2d_matrix, axis=-1) # shape=(B, 1640, 1640), dtype=float32
-        # saved_offset[0] = softmax_corr_2d_matrix[0,50,:]
+        occ_out = self.MLP_occupancy(corr_2d_matrix, source_sampled_contour_index, target_sampled_contour_index)
 
         return occ_out
 
 
-    def MLP_score(self, cost, source_sampled_contour_index, target_sampled_contour_index):
+    def MLP_occupancy(self, cost, source_sampled_contour_index, target_sampled_contour_index):
         """
         Arguments:
             cost: B H_s H_t
@@ -235,20 +231,24 @@ class LocalAlignment(tf.keras.Model):
             ... D
         """
         
-        X, Y = tf.meshgrid(source_sampled_contour_index, target_sampled_contour_index)
-        X = tf.reshape(X, [-1])
-        Y = tf.reshape(Y, [-1])
-
-        X = tf.repeat( tf.expand_dims(X, axis=0), repeats=8, axis=0)  # (8, 10000)
-        Y = tf.repeat( tf.expand_dims(Y, axis=0), repeats=8, axis=0)  # (8, 10000)
-
-        sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), X, Y, abs_scale=True)
-        concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), X, Y], axis=-1)
-
-        occ = self.occupancy_mlp(concat_sampled_cost)
-        occ = tf.reshape(occ, [occ.shape[0], 100, 100, 1])
+        source_sampled_contour_index = tf.cast(source_sampled_contour_index, tf.float32)
+        target_sampled_contour_index = tf.cast(target_sampled_contour_index, tf.float32)
         
-        return occ
+        batch_size = source_sampled_contour_index.shape[0]
+        occ_list = []
+        for a_batch_index in range(batch_size):
+            mesh_X, mesh_Y = tf.meshgrid(source_sampled_contour_index[a_batch_index, :], target_sampled_contour_index[a_batch_index, :])
+
+            sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), mesh_X, mesh_Y, abs_scale=True)
+            concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), mesh_X, mesh_Y], axis=-1)  # (100, 10, 3)
+            occ = self.occupancy_mlp(concat_sampled_cost)
+            occ_list.append(occ[:,:,0])
+        occ_tensor = tf.stack(occ_list, axis=0)
+        occ_tensor = tf.transpose(occ_tensor, perm=[0,2,1])
+
+        final_occ = tf.nn.softmax(occ_tensor, axis=-1)
+        
+        return final_occ
 
 
 class LAM(tf.keras.layers.Layer):

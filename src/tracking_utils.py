@@ -36,6 +36,19 @@ def robust_l1(x):
     return (x ** 2 + 0.001 ** 2) ** 0.5
 
 
+def occ_cycle_consistency_loss(prev_gt_occ, pred_occ):
+    '''
+    prev_gt_occ.shape TensorShape([8, 100])
+    pred_occ.shape  TensorShape([8, 10, 100])
+    '''
+    
+    pred_occ = tf.math.reduce_sum(pred_occ, axis=1)  # [8, 10, 100] --> [8, 100]
+    error = robust_l2(prev_gt_occ - pred_occ)
+    a_loss = tf.reduce_mean(error)
+    
+    return a_loss
+
+
 def corr_2d_loss( gt_prev_id_assignments, gt_cur_id_assignments, corr_2d_matrix):
     # classification loss only for tracked points
     scce = tf.keras.losses.SparseCategoricalCrossentropy()
@@ -165,17 +178,19 @@ def matching_spatial_points_loss(gt_prev_id_assignments, gt_cur_id_assignments, 
 # -------------------------------- Unsupervised Learning Losses -----------------------------------------------------------
 def get_closest_contour_id(seg_points_xy, seg_points_mask, pred_tracking_points):
     '''
+    get the closest point in seg_points_xy with respect to pred_tracking_points
 
     :param seg_points_xy: shape [batch_size, num_seg_points, 2], dtype tf.float32
     :param seg_points_mask:  shape [batch_size, num_seg_points, 1], dtype tf.float32
     :param pred_tracking_points: shape [batch_size, num_seg_points, 2], dtype tf.float32
+
     :return: shape [batch_size, num_seg_points, 1], dtype tf.int32
     '''
     closest_contour_id_list = []
 
     for a_point_index in range(pred_tracking_points.shape[1]):
         temp_pred_tracking_points = tf.expand_dims(pred_tracking_points[:, a_point_index, :], axis=1)
-        diff_dist = seg_points_xy - tf.repeat(temp_pred_tracking_points, repeats=pred_tracking_points.shape[1], axis=1)
+        diff_dist = seg_points_xy - tf.repeat(temp_pred_tracking_points, repeats=seg_points_xy.shape[1], axis=1)
         l2_dist = tf.math.reduce_euclidean_norm(diff_dist, axis=-1)
         cur_id_assign = tf.math.argmin(l2_dist, axis=1)  # shape (Batch_size) and dtype int64
         closest_contour_id_list.append(cur_id_assign)
