@@ -366,10 +366,6 @@ def predict(
     prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
     cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
     
-    # ----------------------
-
-    # pred_back_spatial_tracking_points = cur_seg_points + backward_spatial_offset
-    # pred_spatial_tracking_points = prev_seg_points + forward_spatial_offset
     # ----------------------- Metrics -----------------------
     if evaluate_bool:  # evaluation on validation set during training
         # perform validation for every epoch
@@ -378,11 +374,11 @@ def predict(
 
     else:  # prediction on test set after training
         # convert id_assign to x,y points in image space
-        id_assign1 = tracking_points_batch[0].numpy()
-        id_assign2 = tracking_points_batch[1].numpy()
-        seg_point1 = seg_points_batch[0].numpy()
-        seg_point2 = seg_points_batch[1].numpy()
-        pred_cur_contour_indices = predicted_cur_contour_indices_tensor[0].numpy()
+        id_assign1 = tracking_points_batch[0].numpy()  # (5, 1)
+        id_assign2 = tracking_points_batch[1].numpy()  # (5, 1)
+        seg_point1 = seg_points_batch[0].numpy()       # (1640, 3)
+        seg_point2 = seg_points_batch[1].numpy()       # (1640, 3)
+        pred_cur_contour_indices = predicted_cur_contour_indices_tensor[0].numpy()  # (all_prev_contour_points,)
 
         gt_tracking_points = seg_point2[id_assign2[:, 0], :2]  # index 0 to remove the last dimension
 
@@ -393,7 +389,10 @@ def predict(
           np_cur_id_assign = pred_cur_contour_indices[prev_id_assign]
 
         # use the closest contour id to get the pred_tracking_points
-        pred_tracking_points = seg_point2[np_cur_id_assign, :2]
+        pred_tracking_points = seg_point2[np_cur_id_assign, :2]  # (5, 2)
+        pred_all_tracking_points = np.zeros_like(seg_point2[:,:2]) - 10  # to keep shape of pred_all_tracking_points the same throughout the video
+        pred_all_tracking_points[pred_cur_contour_indices] = seg_point2[pred_cur_contour_indices, :2]
+        
         prev_id_assign = np_cur_id_assign
 
         # ------------------------- get normal vectors -------------------------
@@ -439,7 +438,7 @@ def predict(
         if plot_dir and plot_count < num_plots:
           plot_count += 1
           save_dir = f'{plot_dir}/pred_tracking_points'
-
+          
           uflow_plotting.predict_tracking_plot(save_dir,
                                                plot_count,
                                                image_batch[0].numpy(),
@@ -455,14 +454,14 @@ def predict(
 
           # Dense correspondence figure for manuscript
           # uflow_plotting.save_tracked_contour_indices(save_dir, plot_count, num_plots, np_all_cur_id_assign[:,0])
-          # uflow_plotting.predict_tracking_plot_manuscript(save_dir,
-          #                                                 plot_count,
-          #                                                 image_batch[0].numpy(),
-          #                                                 image_batch[1].numpy(),
-          #                                                 seg_points_batch[0].numpy(),
-          #                                                 seg_points_batch[1].numpy(),
-          #                                                 pred_spatial_tracking_points[0],
-          #                                                 num_plots)
+          uflow_plotting.predict_tracking_plot_manuscript(save_dir,
+                                                          plot_count,
+                                                          image_batch[0].numpy(),
+                                                          image_batch[1].numpy(),
+                                                          seg_points_batch[0].numpy(),
+                                                          seg_points_batch[1].numpy(),
+                                                          pred_all_tracking_points,
+                                                          num_plots)
 
         # ---------------- Evaluate F Metric, warp error, and spatial accuracy ------------------
         image_height, image_width = image_batch.shape[1:3]

@@ -289,7 +289,7 @@ class ContourFlow(object):
       if (for_index+1)*num_points_in_batch > prev_seg_points_limit:  # last a_prev_contour_index
         sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, prev_seg_points_limit-1, prev_seg_points_limit-a_prev_contour_index)
       else:
-        sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, num_points_in_batch-1, num_points_in_batch)
+        sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, a_prev_contour_index + num_points_in_batch-1, num_points_in_batch)
       sampled_prev_contour_indices = tf.expand_dims(sampled_prev_contour_indices, axis=0)
       # find 20 nearby points in the current contour
       closest_cur_sampled_contour_indices = implicit_utils.sample_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
@@ -302,8 +302,8 @@ class ContourFlow(object):
       predicted_cur_contour_indices_list.append(predicted_cur_contour_indices)
     
     predicted_cur_contour_indices_tensor = tf.concat(predicted_cur_contour_indices_list,axis=-1)
-    
     # -----------------------------------
+    # This part is to compute the validation loss
     sampled_prev_contour_indices = implicit_utils.sample_initial_points(prev_seg_points, prev_seg_points_limit)
     sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)  # Problem: only uses discrete representation of the image
     

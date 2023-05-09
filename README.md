@@ -111,6 +111,9 @@ First, edit src/uflow_flags.py to change hyperparameters such as learning rate a
 
 >python -m src.contour_flow_main --predict_on=custom:uflow/assets/HACKS_live/tfrecord/valid/ --generated_dir=uflow/generated/HACKS_live_cycle_normal_batch8/  --use_seg_points --use_tracking_points --width=512 --height=512
 
+python -m src.contour_flow_main --predict_on=custom:/data/junbong/optical_flow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/test1/ --generated_dir=/data/junbong/optical_flow/generated_5_3_2023/pc_5small_dense_matlab_seg_all_points_occ_cycle_batch8/  --use_seg_points --use_tracking_points
+
+
 ## Citation
 ```
 @inproceedings{jang2023contourtracking,
