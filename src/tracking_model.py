@@ -225,8 +225,8 @@ class LocalAlignment(tf.keras.Model):
         """
         Arguments:
             cost: B H_s H_t
-            src_coord: B N C
-            trg_coord: B N C
+            source_sampled_contour_index: B initial_points
+            target_sampled_contour_index: B initial_points*nearby_points
         Returns:
             ... D
         """
@@ -238,7 +238,7 @@ class LocalAlignment(tf.keras.Model):
         occ_list = []
         for a_batch_index in range(batch_size):
             mesh_X, mesh_Y = tf.meshgrid(source_sampled_contour_index[a_batch_index, :], target_sampled_contour_index[a_batch_index, :])
-
+            import pdb;pdb.set_trace()
             sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), mesh_X, mesh_Y, abs_scale=True)
             concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), mesh_X, mesh_Y], axis=-1)  # (100, 10, 3)
             occ = self.occupancy_mlp(concat_sampled_cost)

@@ -78,7 +78,7 @@ flags.DEFINE_integer('width', None, 'Image width for training and evaluation.')
 flags.DEFINE_bool('crop_instead_of_resize', False, 'Crops images for training '
                   'instead of resizing the images.')
 flags.DEFINE_integer('seq_len', 2, 'Sequence length for training flow.')
-flags.DEFINE_integer('batch_size', 4, 'Batch size for training flow on '
+flags.DEFINE_integer('batch_size', -1, 'Batch size for training flow on '
                      'gpu.')
 flags.DEFINE_string('optimizer', 'adam', 'One of "adam", "sgd"')
 flags.DEFINE_float('gpu_learning_rate', 10**-4, 'Learning rate for training '
