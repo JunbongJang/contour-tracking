@@ -22,7 +22,7 @@ def sample_initial_points(source_seg_points, source_seg_points_limit, NUM_INITIA
     return source_sampled_contour_index
 
 
-def sample_nearby_points_for_implicit_cycle_consistency(source_sampled_contour_index, source_seg_points, target_seg_points, NUM_NEIGHB_SAMPLE_POINTS=20):
+def sample_nearby_points_for_implicit_cycle_consistency(source_sampled_contour_index, source_seg_points, target_seg_points, NUM_NEIGHB_SAMPLE_POINTS=30):
     '''
     from the source contour points, find the closest NUM_NEIGHB_SAMPLE_POINTS points on the target contour
 
@@ -143,8 +143,11 @@ def create_GT_occupnacy(sampled_contour_indices, seg_points_shape, sampled_nearb
     gt_occ_sum = tf.math.reduce_sum(gt_occ, axis=-1)  # for each sample point, zero, one or two points with value 1 among nearby contour points
     gt_occ_sum_zero = (gt_occ_sum == 0)
     gt_occ_sum_zero = tf.cast(gt_occ_sum_zero, tf.float32)
+    hi = gt_occ_sum_zero / gt_occ.shape[-1]  # e.g. set all values to 0.05, 0.05, ..., 0.05
+    hi = tf.expand_dims(hi, axis=-1)  
+    
     gt_occ_sum = gt_occ_sum + gt_occ_sum_zero  # to prevent nan from dividing by 0 
-    gt_occ = gt_occ / tf.expand_dims( gt_occ_sum, axis= -1)  # in case there are two duplicate indices (i.e. sequence 5,4,3,2,1,0,1,2,3,4,5 )
+    gt_occ = hi + gt_occ / tf.expand_dims( gt_occ_sum, axis= -1)  # in case there are two duplicate indices (i.e. sequence 5,4,3,2,1,0,1,2,3,4,5 )
     
     # assert tf.math.reduce_sum(gt_occ) <= NUM_SAMPLE_POINTS*batch_size
 
