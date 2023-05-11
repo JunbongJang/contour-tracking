@@ -133,8 +133,12 @@ class LocalAlignment(tf.keras.Model):
 
         :param x0: original first feature (B, H, W, C)
         :param x1: orignal second feature (B, H, W, C)
+        :param seg_point1: (B, N, 2)
+        :param seg_point2: (B, N, 2)
         :param cnt0: contour of the first image (B, N, C) Points are in Width and Height order, unlike the image
         :param pos_emb: (B, N, 2)
+        :param source_sampled_contour_index: (B, initial_points)
+        :param target_sampled_contour_index: (B, initial_points, nearby_points)
 
         :param seg_point1_limit and seg_point2_limit
         During inference, they are used to remove all negative values that are padded in the data loading procedure to obtain consistent shape
@@ -173,7 +177,7 @@ class LocalAlignment(tf.keras.Model):
         features2 = self.encoder(x1) 
         a_feature1 = features1[-1]  
         a_feature2 = features2[-1]
-
+        
         # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
         sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
         normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
@@ -226,7 +230,7 @@ class LocalAlignment(tf.keras.Model):
         Arguments:
             cost: B H_s H_t
             source_sampled_contour_index: B initial_points
-            target_sampled_contour_index: B initial_points*nearby_points
+            target_sampled_contour_index: B initial_points nearby_points
         Returns:
             ... D
         """
@@ -234,17 +238,17 @@ class LocalAlignment(tf.keras.Model):
         source_sampled_contour_index = tf.cast(source_sampled_contour_index, tf.float32)
         target_sampled_contour_index = tf.cast(target_sampled_contour_index, tf.float32)
         
+        source_sampled_contour_index = tf.repeat( tf.expand_dims(source_sampled_contour_index, axis=-1), target_sampled_contour_index.shape[-1], axis=-1)  # shape becomes (B initial_points nearby_points)
+    
         batch_size = source_sampled_contour_index.shape[0]
         occ_list = []
         for a_batch_index in range(batch_size):
-            mesh_X, mesh_Y = tf.meshgrid(source_sampled_contour_index[a_batch_index, :], target_sampled_contour_index[a_batch_index, :])
-            import pdb;pdb.set_trace()
-            sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), mesh_X, mesh_Y, abs_scale=True)
-            concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), mesh_X, mesh_Y], axis=-1)  # (100, 10, 3)
+            sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), source_sampled_contour_index[a_batch_index], target_sampled_contour_index[a_batch_index], abs_scale=True)
+            concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), source_sampled_contour_index[a_batch_index], target_sampled_contour_index[a_batch_index]], axis=-1)  # (100, 10, 3)
             occ = self.occupancy_mlp(concat_sampled_cost)
             occ_list.append(occ[:,:,0])
+            
         occ_tensor = tf.stack(occ_list, axis=0)
-        occ_tensor = tf.transpose(occ_tensor, perm=[0,2,1])
 
         final_occ = tf.nn.softmax(occ_tensor, axis=-1)
         
