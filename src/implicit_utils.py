@@ -43,7 +43,7 @@ def sample_nearby_points_for_implicit_cycle_consistency(source_sampled_contour_i
     # find the closest points in the current contour with respect to the sampled points in the previous contour
     sampled_source_seg_points = tf.gather_nd(source_seg_points, indices)
     sampled_source_seg_points = tf.reshape(sampled_source_seg_points[:,:2], shape=[batch_size, NUM_SOURCE_SAMPLE_POINTS, 2])
-    closest_target_seg_points_id = tracking_utils.get_closest_contour_id(target_seg_points[:,:,:2], None, sampled_source_seg_points)  # [8, 10, 1]
+    closest_target_seg_points_id = tracking_utils.get_closest_contour_id(target_seg_points[:,:,:2], sampled_source_seg_points)  # [batch_size, NUM_SOURCE_SAMPLE_POINTS, 1]
 
     # get NUM_NEIGHB_SAMPLE_POINTS nearby points for each closest_target_sampled_seg_points
     nearby_target_contour_index_list = []

@@ -175,18 +175,18 @@ def matching_spatial_points_loss(gt_prev_id_assignments, gt_cur_id_assignments, 
     return a_loss
 
 # -------------------------------- Unsupervised Learning Losses -----------------------------------------------------------
-def get_closest_contour_id(seg_points_xy, seg_points_mask, pred_tracking_points):
+def get_closest_contour_id(seg_points_xy, pred_tracking_points):
     '''
+    TODO: get rid of for loop
     get the closest point in seg_points_xy with respect to pred_tracking_points
 
     :param seg_points_xy: shape [batch_size, num_seg_points, 2], dtype tf.float32
     :param seg_points_mask:  shape [batch_size, num_seg_points, 1], dtype tf.float32
-    :param pred_tracking_points: shape [batch_size, num_seg_points, 2], dtype tf.float32
+    :param pred_tracking_points: shape [batch_size, num_sampled_points, 2], dtype tf.float32
 
     :return: shape [batch_size, num_seg_points, 1], dtype tf.int32
     '''
     closest_contour_id_list = []
-
     for a_point_index in range(pred_tracking_points.shape[1]):
         temp_pred_tracking_points = tf.expand_dims(pred_tracking_points[:, a_point_index, :], axis=1)
         diff_dist = seg_points_xy - tf.repeat(temp_pred_tracking_points, repeats=seg_points_xy.shape[1], axis=1)
@@ -1092,7 +1092,7 @@ def get_pixel_value(a_feature, x_coord_list, y_coord_list):
     - output: tensor of shape (B, num_points, C)
     """
     # assert x_coord_list.shape == y_coord_list.shape
-    batch_size = x_coord_list.shape[0]
+    batch_size = tf.shape(x_coord_list)[0]
     number_of_points = tf.shape(x_coord_list)[1]  # returns the dynamic shape whereas Tensor.shape returns the static shape of the tensor
 
     x_coord_list = tf.reshape(x_coord_list, shape=[-1])

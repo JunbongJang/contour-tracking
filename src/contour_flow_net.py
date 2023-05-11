@@ -279,31 +279,45 @@ class ContourFlow(object):
     prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
     # cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
 
-    # -------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # for every point in the prev contour, find its matching point on the current contour
+    # version 1
+    sampled_prev_contour_indices = tf.linspace(0, prev_seg_points_limit-1, prev_seg_points_limit)
+    sampled_prev_contour_indices = tf.expand_dims(sampled_prev_contour_indices, axis=0)   # (1, prev_contour_points)
+    sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)
 
+    # find 20 nearby points in the current contour
+    nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+
+    # predict occupancy between 50 initial points x 20 nearby points
+    occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
+
+    # find the current contour indices with max occupancy
+    predicted_cur_contour_indices_tensor = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, nearby_cur_sampled_contour_indices)
+    # -------------------------------------------------------------------
+    # version 0 (obsolete)
     # prediction in a batch (400 points) for efficiency
-    num_points_in_batch = 400
-    predicted_cur_contour_indices_list = []
-    for for_index, a_prev_contour_index in enumerate(range(0, prev_seg_points_limit, num_points_in_batch)):
-      if (for_index+1)*num_points_in_batch > prev_seg_points_limit:  # last a_prev_contour_index
-        sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, prev_seg_points_limit-1, prev_seg_points_limit-a_prev_contour_index)
-      else:
-        sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, a_prev_contour_index + num_points_in_batch-1, num_points_in_batch)
-      sampled_prev_contour_indices = tf.expand_dims(sampled_prev_contour_indices, axis=0)
-      # find 20 nearby points in the current contour
-      nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+    # num_points_in_batch = 400
+    # predicted_cur_contour_indices_list = []
+    # for for_index, a_prev_contour_index in enumerate(range(0, prev_seg_points_limit, num_points_in_batch)):
+    #   if (for_index+1)*num_points_in_batch > prev_seg_points_limit:  # last a_prev_contour_index
+    #     sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, prev_seg_points_limit-1, prev_seg_points_limit-a_prev_contour_index)
+    #   else:
+    #     sampled_prev_contour_indices = tf.linspace(a_prev_contour_index, a_prev_contour_index + num_points_in_batch-1, num_points_in_batch)
+    #   sampled_prev_contour_indices = tf.expand_dims(sampled_prev_contour_indices, axis=0)
+    #   # find 20 nearby points in the current contour
+    #   nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
 
-      # predict occupancy between 400 prev points x 20*400 cur points
-      occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
+    #   # predict occupancy between 400 prev points x 20*400 cur points
+    #   occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
 
-      # find the current contour indices with max occupancy
-      predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, nearby_cur_sampled_contour_indices)
-      predicted_cur_contour_indices_list.append(predicted_cur_contour_indices)
+    #   # find the current contour indices with max occupancy
+    #   predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, nearby_cur_sampled_contour_indices)
+    #   predicted_cur_contour_indices_list.append(predicted_cur_contour_indices)
 
-    predicted_cur_contour_indices_tensor = tf.concat(predicted_cur_contour_indices_list,axis=-1)
-    
+    # predicted_cur_contour_indices_tensor = tf.concat(predicted_cur_contour_indices_list,axis=-1)
     # -----------------------------------
+
     # This part is to compute the validation loss
     sampled_prev_contour_indices = implicit_utils.sample_initial_points(prev_seg_points, prev_seg_points_limit)
     sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)  # Problem: only uses discrete representation of the image
@@ -332,7 +346,7 @@ class ContourFlow(object):
     return forward_occ_cycle_consistency_loss, backward_occ_cycle_consistency_loss, predicted_cur_contour_indices_tensor, tracking_pos_emb, input_height, input_width
   
 
-  @tf.function
+  # @tf.function
   def infer(self,
             image1,
             image2,

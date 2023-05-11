@@ -244,7 +244,9 @@ class LocalAlignment(tf.keras.Model):
         occ_list = []
         for a_batch_index in range(batch_size):
             sampled_cost = bilinear_sampler_1d(tf.expand_dims(cost, axis=-1), source_sampled_contour_index[a_batch_index], target_sampled_contour_index[a_batch_index], abs_scale=True)
-            concat_sampled_cost = tf.stack([tf.squeeze(sampled_cost), source_sampled_contour_index[a_batch_index], target_sampled_contour_index[a_batch_index]], axis=-1)  # (100, 10, 3)
+            sampled_cost = sampled_cost[:,:,0]  # this assumes that there is only one channel
+            
+            concat_sampled_cost = tf.stack([sampled_cost, source_sampled_contour_index[a_batch_index], target_sampled_contour_index[a_batch_index]], axis=-1)  # (100, 10, 3)
             occ = self.occupancy_mlp(concat_sampled_cost)
             occ_list.append(occ[:,:,0])
             
