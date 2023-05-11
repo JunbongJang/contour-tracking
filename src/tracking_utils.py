@@ -38,11 +38,10 @@ def robust_l1(x):
 
 def occ_cycle_consistency_loss(prev_gt_occ, pred_occ):
     '''
-    prev_gt_occ.shape TensorShape([8, 100])
-    pred_occ.shape  TensorShape([8, 10, 100])
+    prev_gt_occ.shape TensorShape([8, sample_points, nearby_points])
+    pred_occ.shape  TensorShape([8, sample_points, nearby_points])
     '''
     
-    pred_occ = tf.math.reduce_sum(pred_occ, axis=1)  # [8, 10, 100] --> [8, 100]
     error = robust_l2(prev_gt_occ - pred_occ)
     a_loss = tf.reduce_mean(error)
     

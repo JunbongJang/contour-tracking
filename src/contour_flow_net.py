@@ -332,7 +332,7 @@ class ContourFlow(object):
     return forward_occ_cycle_consistency_loss, backward_occ_cycle_consistency_loss, predicted_cur_contour_indices_tensor, tracking_pos_emb, input_height, input_width
   
 
-  # @tf.function
+  @tf.function
   def infer(self,
             image1,
             image2,
@@ -404,7 +404,7 @@ class ContourFlow(object):
 
     return losses, saved_offset_dict
 
-  # @tf.function
+  @tf.function
   def train_step(self,
                  batch,
                  current_epoch,
@@ -660,11 +660,11 @@ class ContourFlow(object):
       # first contour to second contour
       nearby_new_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points)
       occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, predicted_prev_contour_indices, nearby_new_cur_sampled_contour_indices)
-
-      prev_gt_occ = implicit_utils.create_GT_occupnacy(sampled_prev_contour_indices, prev_seg_points.shape[:2], nearby_prev_sampled_contour_indices)   # create GT occupancy on previous contour (batch_size, 1000)
+      
+      prev_gt_occ = implicit_utils.create_GT_occupnacy(sampled_prev_contour_indices, prev_seg_points.shape[:2], nearby_prev_sampled_contour_indices)   # create GT occupancy on previous contour (8, 50, 20)
       backward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(prev_gt_occ, occ_contour_backward)
 
-      cur_gt_occ = implicit_utils.create_GT_occupnacy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour
+      cur_gt_occ = implicit_utils.create_GT_occupnacy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour (8, 50, 20)
       forward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(cur_gt_occ, occ_contour_forward)
       # ----------------------------------------------------------------------------------------------------------
       
