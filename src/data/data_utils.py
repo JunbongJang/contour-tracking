@@ -414,7 +414,9 @@ def predict(
                 cur_x, cur_y, cur_mask = cur_contour_point[0], cur_contour_point[1], cur_contour_point[2]
                 prev_contour_point = prev_contour_points[prev_contour_point_index]
                 prev_x, prev_y, prev_mask = prev_contour_point[0], prev_contour_point[1], prev_contour_point[2]
-
+                # tf.print(prev_contour_point_index, cur_contour_point_index, prev_mask, cur_mask)
+                # if cur_mask == 0:
+                #   import pdb;pdb.set_trace()
                 assert cur_mask == 1
                 assert prev_mask == 1
 

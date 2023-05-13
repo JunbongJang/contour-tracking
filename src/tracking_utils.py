@@ -41,8 +41,8 @@ def occ_cycle_consistency_loss(prev_gt_occ, pred_occ):
     prev_gt_occ.shape TensorShape([8, sample_points, nearby_points])
     pred_occ.shape  TensorShape([8, sample_points, nearby_points])
     '''
-    
-    error = robust_l2(prev_gt_occ - pred_occ)
+    cce = tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
+    error = cce(prev_gt_occ, pred_occ)   # robust_l2(prev_gt_occ - pred_occ)
     a_loss = tf.reduce_mean(error)
     
     return a_loss
@@ -1332,7 +1332,7 @@ def cost_volume_at_contour_points(a_feature1, a_feature2, cnt0, cnt1, max_displa
     normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
 
     # compute the cost volume [b, N, d^2] <-- [b, N, c] * [b, N, c, d^2]
-    cost_volume = tf.reduce_mean( normalized_sampled_feature1 * normalized_sampled_feature2, axis=2)
+    cost_volume = tf.reduce_mean( normalized_sampled_feature1 * normalized_sampled_feature2, axis=2)  # TODO: use einops for readability
 
     # for debugging, check the following
     # tf.nn.moments(x=normalized_sampled_feature1, axes=[-2], keepdims=True)

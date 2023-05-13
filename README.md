@@ -30,7 +30,7 @@ Build and run Docker using our Dockerfile.
 * For instance:
     >sudo docker build -t tf24_contour_tracking .
 
-    >sudo docker run -v /home/junbong/contour-tracking:/home/docker/contour-tracking -v /data/junbong/optical_flow/generated_3_5_2023:/data/junbong/optical_flow/generated_3_5_2023 -v /data/junbong/optical_flow/assets:/data/junbong/optical_flow/assets --gpus '"device=0"' -it tf24_contour_tracking
+    >sudo docker run -v /home/junbong/contour-tracking:/home/docker/contour-tracking -v /data/junbong/optical_flow/generated_5_3_2023:/data/junbong/optical_flow/generated_5_3_2023 -v /data/junbong/optical_flow/assets:/data/junbong/optical_flow/assets --gpus '"device=0"' -it tf24_contour_tracking
 
 Then, install Python dependencies in the requirements.txt
 >./install_setup.sh

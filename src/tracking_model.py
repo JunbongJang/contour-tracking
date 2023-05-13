@@ -27,7 +27,6 @@ from einops import rearrange
 
 from src.tracking_utils import generate_pos_emb, get_adj_ind, abs2rel, bilinear_sampler_1d, cnt2poly, cost_volume_at_contour_points, normalize_1d_features
 
-
 class PointSetTracker(tf.Module):
     def __init__(self, num_iter=5):
         super(PointSetTracker, self).__init__()
@@ -119,6 +118,13 @@ class LocalAlignment(tf.keras.Model):
         self.cross_attn_layer_forward = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=128, value_dim=128)
         self.cross_attn_layer_backward = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=128, value_dim=128)
 
+        self.corr_embedder = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(32, 3, 1, "same"),
+            tf.keras.layers.ReLU(),
+            tf.keras.layers.Conv2D(64, 3, 1, "same"),
+            tf.keras.layers.ReLU()
+        ])
+
         self.pos_embed = tf.keras.layers.Dense(128)
         self.occupancy_mlp = tf.keras.Sequential([
             tf.keras.layers.Dense(256),
@@ -177,19 +183,20 @@ class LocalAlignment(tf.keras.Model):
         features2 = self.encoder(x1) 
         a_feature1 = features1[-1]  
         a_feature2 = features2[-1]
-        
-        # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
-        sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
-        normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
-        poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        concat_sampled_features1 = tf.concat((normalized_sampled_feature1, pos_emb, poly1),
-                                             axis=-1)  # m_in shape is (B, N, C+4)
 
-        sampled_feature2 = bilinear_sampler_1d(a_feature2, seg_point2[:, :, 0], seg_point2[:, :, 1])  # B x N x c
-        normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
+        forward_sampled_cost_volume = cost_volume_at_contour_points(a_feature1, a_feature2, seg_point1, seg_point2, max_displacement=1)
+        backward_sampled_cost_volume = cost_volume_at_contour_points(a_feature2, a_feature1, seg_point2, seg_point1, max_displacement=1)
+
+        # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
+        # sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
+        # normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
+        poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
+        concat_sampled_features1 = tf.concat((forward_sampled_cost_volume, pos_emb, poly1), axis=-1)  # m_in shape is (B, N, C+4)
+
+        # sampled_feature2 = bilinear_sampler_1d(a_feature2, seg_point2[:, :, 0], seg_point2[:, :, 1])  # B x N x c
+        # normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
         poly2 = cnt2poly(seg_point2)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        concat_sampled_features2 = tf.concat((normalized_sampled_feature2, pos_emb, poly2),
-                                             axis=-1)  # m_in shape is (B, N, C+4)
+        concat_sampled_features2 = tf.concat((backward_sampled_cost_volume, pos_emb, poly2), axis=-1)  # m_in shape is (B, N, C+4)
 
         # cross_attn_tensor shape is ([batch_size, target's num_points, 132])
         # cross_attn_scores shape is ([batch_size, num_heads, target's num_points, source's num_points])
@@ -208,18 +215,10 @@ class LocalAlignment(tf.keras.Model):
         # no cross attention is used
         # forward_cross_attn = concat_sampled_features1 + concat_sampled_features2
         # backward_cross_attn = forward_cross_attn
-
-        # forward_spatial_offset = self.spatial_offset_module(forward_cross_attn)
-        # backward_spatial_offset = self.spatial_offset_module(backward_cross_attn)  # shape=(1, 1150, 2), dtype=float32
-        # saved_offset[0] = forward_spatial_offset
-
-        # return forward_spatial_offset, backward_spatial_offset, saved_offset
     
-        # ----------------------
-        # Classify id of each tracking point
-        # ----------------------
         # compute 2d Correlation matrix [B, num_seg_points, num_seg_points] <-- [B, num_seg_points, 132] * [B, num_seg_points, 132]
         corr_2d_matrix = tf.einsum('bic,bjc->bij', forward_cross_attn, backward_cross_attn)
+        # embedded_corr_2d = self.corr_embedder(tf.expand_dims(corr_2d_matrix,axis=-1))
         occ_out = self.MLP_occupancy(corr_2d_matrix, source_sampled_contour_index, target_sampled_contour_index)
 
         return occ_out

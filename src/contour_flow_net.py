@@ -277,7 +277,7 @@ class ContourFlow(object):
     # -------------------- To remove negative padding -------------------
     # find the index in seg_points from where negative values start
     prev_seg_points_limit = tracking_utils.get_first_occurrence_indices(prev_seg_points[:,:,0], -0.1)[0]  # index 0 is fine since batch size is 1
-    # cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
+    cur_seg_points_limit = tracking_utils.get_first_occurrence_indices(cur_seg_points[:,:,0], -0.1)[0]
 
     # ------------------------------------------------------------------
     # for every point in the prev contour, find its matching point on the current contour
@@ -287,7 +287,7 @@ class ContourFlow(object):
     sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)
 
     # find 20 nearby points in the current contour
-    nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+    nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points, cur_seg_points_limit)
 
     # predict occupancy between 50 initial points x 20 nearby points
     occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
@@ -301,23 +301,23 @@ class ContourFlow(object):
     sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)  # Problem: only uses discrete representation of the image
     
     # first contour to second contour
-    nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+    nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points, cur_seg_points_limit)
     occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
     predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, nearby_cur_sampled_contour_indices)
 
     # second contour to first contour
-    nearby_prev_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_cur_contour_indices, cur_seg_points, prev_seg_points)
+    nearby_prev_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_cur_contour_indices, cur_seg_points, prev_seg_points, prev_seg_points_limit)
     occ_contour_backward = self._tracking_model(cur_patch, prev_patch, cur_seg_points, prev_seg_points, tracking_pos_emb, predicted_cur_contour_indices, nearby_prev_sampled_contour_indices)
     predicted_prev_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_backward, nearby_prev_sampled_contour_indices)
     
     # first contour to second contour
-    nearby_new_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points)
+    nearby_new_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points, cur_seg_points_limit)
     occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, predicted_prev_contour_indices, nearby_new_cur_sampled_contour_indices)
 
-    prev_gt_occ = implicit_utils.create_GT_occupnacy(sampled_prev_contour_indices, prev_seg_points.shape[:2], nearby_prev_sampled_contour_indices)   # create GT occupancy on previous contour
+    prev_gt_occ = implicit_utils.create_GT_occupancy(sampled_prev_contour_indices, prev_seg_points.shape[:2], nearby_prev_sampled_contour_indices)   # create GT occupancy on previous contour
     backward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(prev_gt_occ, occ_contour_backward)
 
-    cur_gt_occ = implicit_utils.create_GT_occupnacy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour
+    cur_gt_occ = implicit_utils.create_GT_occupancy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour
     forward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(cur_gt_occ, occ_contour_forward)
 
 
@@ -396,7 +396,7 @@ class ContourFlow(object):
 
     return losses, saved_offset_dict
 
-  @tf.function
+  # @tf.function
   def train_step(self,
                  batch,
                  current_epoch,
@@ -640,23 +640,23 @@ class ContourFlow(object):
       sampled_prev_contour_indices = tf.cast(sampled_prev_contour_indices, tf.int32)  # Problem: only uses discrete representation of the image
       
       # first contour to second contour
-      nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points)
+      nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points, cur_seg_points_limit)
       occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
       predicted_cur_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_forward, nearby_cur_sampled_contour_indices)
       
       # second contour to first contour
-      nearby_prev_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_cur_contour_indices, cur_seg_points, prev_seg_points)
+      nearby_prev_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_cur_contour_indices, cur_seg_points, prev_seg_points, prev_seg_points_limit)
       occ_contour_backward = self._tracking_model(cur_patch, prev_patch, cur_seg_points, prev_seg_points, pos_emb, predicted_cur_contour_indices, nearby_prev_sampled_contour_indices)
       predicted_prev_contour_indices = implicit_utils.find_max_corr_contour_indices(occ_contour_backward, nearby_prev_sampled_contour_indices)
       
       # first contour to second contour
-      nearby_new_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points)
+      nearby_new_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(predicted_prev_contour_indices, prev_seg_points, cur_seg_points, cur_seg_points_limit)
       occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, pos_emb, predicted_prev_contour_indices, nearby_new_cur_sampled_contour_indices)
       
-      prev_gt_occ = implicit_utils.create_GT_occupnacy(sampled_prev_contour_indices, prev_seg_points.shape[:2], nearby_prev_sampled_contour_indices)   # create GT occupancy on previous contour (8, 50, 20)
+      prev_gt_occ = implicit_utils.create_GT_occupancy(sampled_prev_contour_indices, prev_seg_points.shape[:2], nearby_prev_sampled_contour_indices)   # create GT occupancy on previous contour (8, 50, 20)
       backward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(prev_gt_occ, occ_contour_backward)
 
-      cur_gt_occ = implicit_utils.create_GT_occupnacy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour (8, 50, 20)
+      cur_gt_occ = implicit_utils.create_GT_occupancy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour (8, 50, 20)
       forward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(cur_gt_occ, occ_contour_forward)
       # ----------------------------------------------------------------------------------------------------------
       

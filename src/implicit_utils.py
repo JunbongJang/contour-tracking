@@ -22,7 +22,7 @@ def sample_initial_points(source_seg_points, source_seg_points_limit, NUM_INITIA
     return source_sampled_contour_index
 
 
-def sample_nearby_points_for_implicit_cycle_consistency(source_sampled_contour_index, source_seg_points, target_seg_points, NUM_NEIGHB_SAMPLE_POINTS=30):
+def sample_nearby_points_for_implicit_cycle_consistency(source_sampled_contour_index, source_seg_points, target_seg_points, target_seg_points_limit, NUM_NEIGHB_SAMPLE_POINTS=30):
     '''
     from the source contour points, find the closest NUM_NEIGHB_SAMPLE_POINTS points on the target contour
 
@@ -52,8 +52,10 @@ def sample_nearby_points_for_implicit_cycle_consistency(source_sampled_contour_i
         nearby_target_contour_index_list.append(nearby_target_seg_points_id)
 
     nearby_target_contour_index_tensor = tf.concat(nearby_target_contour_index_list,axis=-1)
-    nearby_target_contour_index_tensor = tf.math.abs(nearby_target_contour_index_tensor)  # TODO: clip max value with target_seg_points_limit
-    # nearby_target_contour_index_tensor = tf.reshape(nearby_target_contour_index_tensor, shape=[batch_size, -1])  # (8, 100)
+    nearby_target_contour_index_tensor = tf.math.abs(nearby_target_contour_index_tensor)  
+    
+    target_seg_points_limit = tf.expand_dims(tf.expand_dims(target_seg_points_limit, axis=-1), axis=-1)
+    nearby_target_contour_index_tensor = tf.clip_by_value(nearby_target_contour_index_tensor, 0, target_seg_points_limit-1)  # clip max value with target_seg_points_limit
     
     return nearby_target_contour_index_tensor
 
@@ -93,13 +95,17 @@ def find_max_corr_contour_indices(occ_contour_forward, closest_cur_sampled_conto
     return predicted_cur_contour_indices
 
 
-def create_GT_occupnacy(sampled_contour_indices, seg_points_shape, sampled_nearby_contour_indices):
+def create_GT_occupancy(sampled_contour_indices, seg_points_shape, sampled_nearby_contour_indices):
     '''
         sampled_contour_indices shape: (batch_size, NUM_SAMPLE_POINTS) represent the initial points before cycle consistency
         seg_points_shape = (batch_size, 1640) tell the maximum number of points in a contour
         sampled_nearby_contour_indices shape: (batch_size, NUM_SAMPLE_POINTS, NUM_NEARBY_POINTS)   
 
         All three input data are about the same one contour
+
+        find which of the sampled_nearby_contour_indices corresponds to the sampled_contour_indices 
+        Each sampled_contour_indices does not have to be one of sampled_nearby_contour_indices, in that case GT vector is a uniform distribution
+        
         Return ground truth occupancy of nearby contour's points. shape: (batch_size, NUM_SAMPLE_POINTS, NUM_NEARBY_POINTS)
         with value 1 for indices at sampled_contour_indices and 0 otherwise
 
@@ -107,35 +113,6 @@ def create_GT_occupnacy(sampled_contour_indices, seg_points_shape, sampled_nearb
 
     assert sampled_contour_indices.shape[1] == sampled_nearby_contour_indices.shape[1]
 
-    batch_size = sampled_nearby_contour_indices.shape[0]
-    NUM_SAMPLE_POINTS = sampled_nearby_contour_indices.shape[1]
-    NUM_NEARBY_POINTS = sampled_nearby_contour_indices.shape[2]
-
-    # ------- This implementation is for matching pairwise all possible points -------------
-    # zero_occ = tf.zeros(seg_points_shape)
-    # updates = tf.ones(shape=sampled_contour_indices.shape[0]*sampled_contour_indices.shape[1])
-    # updates = tf.cast(updates, tf.float32)
-
-    # batch_index_list = tf.repeat(tf.range(batch_size), repeats=NUM_SAMPLE_POINTS)
-    # sampled_contour_indices = tf.reshape(sampled_contour_indices, shape=[-1])
-    # gather_indices = tf.stack([batch_index_list, sampled_contour_indices], axis=1)  # shape is (number of points, 2)
-
-    # # Return occupancy on a contour with a shape (batch_size, 1640) with value 1 for indices at sampled_contour_indices and 0 otherwise
-    # gt_occ_on_contour = tf.tensor_scatter_nd_update(gt_occ, gather_indices, updates)  # (8, 1640)
-    
-    # # assert tf.math.reduce_sum(gt_occ_on_contour) <= NUM_SAMPLE_POINTS  # because some of sampled_contour_indices can be repeated due to uniform sampling
-    
-    # # get gt_occ at sampled_nearby_contour_indices
-    # batch_index_list = tf.repeat(tf.range(batch_size), repeats=NUM_SAMPLE_POINTS*NUM_NEARBY_POINTS)
-    # sampled_nearby_contour_indices = tf.reshape(sampled_nearby_contour_indices, shape=[-1])
-    # gather_indices = tf.stack([batch_index_list, sampled_nearby_contour_indices], axis=1)  # shape is (number of points, 2)
-
-    # gt_occ = tf.gather_nd(gt_occ_on_contour, gather_indices)
-    # gt_occ = tf.reshape(gt_occ, shape=[batch_size, NUM_SAMPLE_POINTS, NUM_NEARBY_POINTS]) 
-    # ---------------------------------------------
-
-    # find which of the sampled_nearby_contour_indices corresponds to the sampled_contour_indices 
-    # (each sampled_contour_indices does not have to be one of sampled_nearby_contour_indices)
     
     gt_occ = sampled_nearby_contour_indices == tf.expand_dims( sampled_contour_indices, axis=-1)
     gt_occ = tf.cast(gt_occ, tf.float32)
@@ -148,7 +125,6 @@ def create_GT_occupnacy(sampled_contour_indices, seg_points_shape, sampled_nearb
     
     gt_occ_sum = gt_occ_sum + gt_occ_sum_zero  # to prevent nan from dividing by 0 
     gt_occ = hi + gt_occ / tf.expand_dims( gt_occ_sum, axis= -1)  # in case there are two duplicate indices (i.e. sequence 5,4,3,2,1,0,1,2,3,4,5 )
-    
     # assert tf.math.reduce_sum(gt_occ) <= NUM_SAMPLE_POINTS*batch_size
 
     return gt_occ
