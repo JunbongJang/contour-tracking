@@ -391,7 +391,7 @@ def predict(
         # use the closest contour id to get the pred_tracking_points
         pred_tracking_points = seg_point2[np_cur_id_assign, :2]  # (5, 2)
         pred_all_tracking_points = np.zeros_like(seg_point2[:,:2]) - 10  # to keep shape of pred_all_tracking_points the same throughout the video
-        pred_all_tracking_points[pred_cur_contour_indices] = seg_point2[pred_cur_contour_indices, :2]
+        pred_all_tracking_points[:pred_cur_contour_indices.shape[0]] = seg_point2[pred_cur_contour_indices, :2]  # predict how first contour points are mapped to second contour points
         
         prev_id_assign = np_cur_id_assign
 

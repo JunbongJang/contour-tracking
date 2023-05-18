@@ -44,6 +44,7 @@ def occ_cycle_consistency_loss(prev_gt_occ, pred_occ):
     cce = tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
     error = cce(prev_gt_occ, pred_occ)   # robust_l2(prev_gt_occ - pred_occ)
     a_loss = tf.reduce_mean(error)
+    tf.print(a_loss)
     
     return a_loss
 
@@ -81,6 +82,7 @@ def corr_cycle_consistency(forward_corr_2d_matrix, backward_corr_2d_matrix):
     return forawrd_loss + backward_loss + forward_diagnoal_loss + backward_diagnoal_loss
 
 # -------------------------------------------------------------------------------------------------------
+
 
 def sample_data_by_index(index_tensor, data_tensor):
     '''
@@ -197,6 +199,31 @@ def get_closest_contour_id(seg_points_xy, pred_tracking_points):
     # (1150, 8) --> (8, 1150) --> (8, 1150, 1)
     closest_contour_id_tensor = tf.expand_dims( tf.transpose( tf.convert_to_tensor(closest_contour_id_list), perm=[1,0]), axis=-1)
     closest_contour_id_tensor = tf.cast(closest_contour_id_tensor, dtype=tf.int32)
+
+    return closest_contour_id_tensor
+
+
+def get_K_closest_contour_id(seg_points_xy, pred_tracking_points, K_closest_points):
+    '''
+    TODO: get rid of for loop
+    get the closest point in seg_points_xy with respect to pred_tracking_points
+
+    :param seg_points_xy: shape [batch_size, num_seg_points, 2], dtype tf.float32
+    :param seg_points_mask:  shape [batch_size, num_seg_points, 1], dtype tf.float32
+    :param pred_tracking_points: shape [batch_size, num_sampled_points, 2], dtype tf.float32
+
+    :return: shape [batch_size, sample_initial_points, sample_neighbor_points], dtype tf.int32
+    '''
+    closest_contour_id_list = []
+    for a_point_index in range(pred_tracking_points.shape[1]):
+        temp_pred_tracking_points = tf.expand_dims(pred_tracking_points[:, a_point_index, :], axis=1)
+        diff_dist = seg_points_xy - tf.repeat(temp_pred_tracking_points, repeats=seg_points_xy.shape[1], axis=1)
+        l2_dist = tf.math.reduce_euclidean_norm(diff_dist, axis=-1)
+        _, cur_id_assign = tf.math.top_k(-1*l2_dist, k=K_closest_points, sorted=True)
+        closest_contour_id_list.append(cur_id_assign)
+
+    # (50, 8, 30) --> (8, 50, 30)
+    closest_contour_id_tensor = tf.transpose( tf.convert_to_tensor(closest_contour_id_list), perm=[1,0,2])  # dtype=tf.int32
 
     return closest_contour_id_tensor
 

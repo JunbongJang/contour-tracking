@@ -289,7 +289,7 @@ class ContourFlow(object):
     # find 20 nearby points in the current contour
     nearby_cur_sampled_contour_indices = implicit_utils.sample_nearby_points_for_implicit_cycle_consistency(sampled_prev_contour_indices, prev_seg_points, cur_seg_points, cur_seg_points_limit)
 
-    # predict occupancy between 50 initial points x 20 nearby points
+    # predict occupancy between ~1000 initial points x 20 nearby points
     occ_contour_forward = self._tracking_model(prev_patch, cur_patch, prev_seg_points, cur_seg_points, tracking_pos_emb, sampled_prev_contour_indices, nearby_cur_sampled_contour_indices)
 
     # find the current contour indices with max occupancy
@@ -658,6 +658,7 @@ class ContourFlow(object):
 
       cur_gt_occ = implicit_utils.create_GT_occupancy(predicted_cur_contour_indices, cur_seg_points.shape[:2], nearby_new_cur_sampled_contour_indices)   # create GT occupancy on current contour (8, 50, 20)
       forward_occ_cycle_consistency_loss = tracking_utils.occ_cycle_consistency_loss(cur_gt_occ, occ_contour_forward)
+
       # ----------------------------------------------------------------------------------------------------------
       
       saved_offset_dict = {0: 0}  # key for sequence number, only one key 0 if seq_num=2

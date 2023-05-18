@@ -118,12 +118,12 @@ class LocalAlignment(tf.keras.Model):
         self.cross_attn_layer_forward = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=128, value_dim=128)
         self.cross_attn_layer_backward = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=128, value_dim=128)
 
-        self.corr_embedder = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(32, 3, 1, "same"),
-            tf.keras.layers.ReLU(),
-            tf.keras.layers.Conv2D(64, 3, 1, "same"),
-            tf.keras.layers.ReLU()
-        ])
+        # self.corr_embedder = tf.keras.Sequential([
+        #     tf.keras.layers.Conv2D(32, 3, 1, "same"),
+        #     tf.keras.layers.ReLU(),
+        #     tf.keras.layers.Conv2D(64, 3, 1, "same"),
+        #     tf.keras.layers.ReLU()
+        # ])
 
         self.pos_embed = tf.keras.layers.Dense(128)
         self.occupancy_mlp = tf.keras.Sequential([
@@ -184,19 +184,19 @@ class LocalAlignment(tf.keras.Model):
         a_feature1 = features1[-1]  
         a_feature2 = features2[-1]
 
-        forward_sampled_cost_volume = cost_volume_at_contour_points(a_feature1, a_feature2, seg_point1, seg_point2, max_displacement=1)
-        backward_sampled_cost_volume = cost_volume_at_contour_points(a_feature2, a_feature1, seg_point2, seg_point1, max_displacement=1)
+        # forward_sampled_cost_volume = cost_volume_at_contour_points(a_feature1, a_feature2, seg_point1, seg_point2, max_displacement=1)
+        # backward_sampled_cost_volume = cost_volume_at_contour_points(a_feature2, a_feature1, seg_point2, seg_point1, max_displacement=1)
 
         # TODO: check if bilinear_sampler_1d is necessary since it's sampling at exact 2d coordinates, not floating point
-        # sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
-        # normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
+        sampled_feature1 = bilinear_sampler_1d(a_feature1, seg_point1[:, :, 0], seg_point1[:, :, 1])  # B x N x c
+        normalized_sampled_feature1 = normalize_1d_features(sampled_feature1)
         poly1 = cnt2poly(seg_point1)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        concat_sampled_features1 = tf.concat((forward_sampled_cost_volume, pos_emb, poly1), axis=-1)  # m_in shape is (B, N, C+4)
+        concat_sampled_features1 = tf.concat((normalized_sampled_feature1, pos_emb, poly1), axis=-1)  # m_in shape is (B, N, C+4)
 
-        # sampled_feature2 = bilinear_sampler_1d(a_feature2, seg_point2[:, :, 0], seg_point2[:, :, 1])  # B x N x c
-        # normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
+        sampled_feature2 = bilinear_sampler_1d(a_feature2, seg_point2[:, :, 0], seg_point2[:, :, 1])  # B x N x c
+        normalized_sampled_feature2 = normalize_1d_features(sampled_feature2)
         poly2 = cnt2poly(seg_point2)  # It represents the contour points' coordinates on +image space. shape is B, N, 2
-        concat_sampled_features2 = tf.concat((backward_sampled_cost_volume, pos_emb, poly2), axis=-1)  # m_in shape is (B, N, C+4)
+        concat_sampled_features2 = tf.concat((normalized_sampled_feature2, pos_emb, poly2), axis=-1)  # m_in shape is (B, N, C+4)
 
         # cross_attn_tensor shape is ([batch_size, target's num_points, 132])
         # cross_attn_scores shape is ([batch_size, num_heads, target's num_points, source's num_points])
