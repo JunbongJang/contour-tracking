@@ -41,6 +41,7 @@ Please find the files used in this section inside the preprocessing folder.
 
 To create GT tracking points using our GUI, specify movie path and save path and run
 >tracking_points_labeling_GUI.py
+
 Please label contour points in the same order for every frame. For instance, label top left contour point first and label bottom right contour point at the end for every frame. 
 Otherwise, the contour point in the current frame is incorrectly mapped to the non-corresponding point in the next frame. 
 
