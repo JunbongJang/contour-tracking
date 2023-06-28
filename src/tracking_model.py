@@ -236,6 +236,8 @@ class LocalAlignment(tf.keras.Model):
         
         source_sampled_contour_index = tf.cast(source_sampled_contour_index, tf.float32)
         target_sampled_contour_index = tf.cast(target_sampled_contour_index, tf.float32)
+
+        # TODO embed contour index
         
         source_sampled_contour_index = tf.repeat( tf.expand_dims(source_sampled_contour_index, axis=-1), target_sampled_contour_index.shape[-1], axis=-1)  # shape becomes (B initial_points nearby_points)
     

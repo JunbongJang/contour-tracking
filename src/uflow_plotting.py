@@ -180,7 +180,7 @@ def save_tracked_contour_indices(plot_dir, cur_index, num_plots, np_all_cur_id_a
     else:
         if os.path.exists(file_path):
             saved_tracking_points = np.load(file_path)
-
+    
     saved_tracking_points[cur_index - 1, :] = np_all_cur_id_assign
     np.save(file_path, saved_tracking_points)
 

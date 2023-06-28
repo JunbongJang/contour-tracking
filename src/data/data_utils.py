@@ -395,6 +395,10 @@ def predict(
         
         prev_id_assign = np_cur_id_assign
 
+        
+        np_all_cur_id_assign = np.zeros(shape=(seg_point2.shape[0]), dtype=np.int32) + pred_cur_contour_indices[-1] + 1
+        np_all_cur_id_assign[:pred_cur_contour_indices.shape[0]] = pred_cur_contour_indices
+        
         # ------------------------- get normal vectors -------------------------
         def get_protrusion_along_normal_vector(prev_contour_points, cur_contour_points, id_assign1, np_cur_id_assign):
             two_left_contour_points = np.roll(prev_contour_points, shift=-2, axis=0)
@@ -455,7 +459,7 @@ def predict(
                                                frame_skip=None)
 
           # Dense correspondence figure for manuscript
-          # uflow_plotting.save_tracked_contour_indices(save_dir, plot_count, num_plots, np_all_cur_id_assign[:,0])
+          uflow_plotting.save_tracked_contour_indices(save_dir, plot_count, num_plots, np_all_cur_id_assign)
           uflow_plotting.predict_tracking_plot_manuscript(save_dir,
                                                           plot_count,
                                                           image_batch[0].numpy(),
