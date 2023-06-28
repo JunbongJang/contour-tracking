@@ -8,7 +8,7 @@
  [Tae-Kyun Kim](https://sites.google.com/view/tkkim/home)\*<sup>1,4</sup>
  <br /><sup>1</sup>KAIST, <sup>2</sup>Boston Children's Hospital, <sup>3</sup>Harvard Medical School, <sup>4</sup>Imperial College London
  <br />*denotes corresponding authors
- <br />Accepted to CVPR 2023
+ <br />CVPR 2023
 
 Tensorflow implementation of contour tracking of live cell and jellyfish videos.<br><br>
 
@@ -36,7 +36,8 @@ Install Python dependencies in the requirements.txt
 >./install_setup.sh
 
 ## Data Pre-processing
-We recommend doing this in a local PC in Windows 10/11
+We recommend doing this in a local PC in Windows 10/11. <br>
+Please find the files used in this section inside the preprocessing folder.
 
 To create GT tracking points using our GUI,
 >tracking_points_labeling_GUI.py
