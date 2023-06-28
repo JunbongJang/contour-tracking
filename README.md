@@ -58,12 +58,12 @@ Otherwise, the contour point in the current frame is incorrectly mapped to the n
 *These pre-processed results will be used as input in our model.
 
 ## Data Conversion to TFRecord
-This section is to create tfrecords comprised of images, seg_points, and tracking_points from the pre-processed results above.
+This section describes how to create tfrecords comprised of images, seg_points, and tracking_points from the pre-processed results above.
 
-For training set
+To create the TFRecord for training set
 >python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_5small_sparse_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
 
-For test set
+To create the TFRecord for test set
 >python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_5small_dense_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
 >python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/HACKS_live/ --shard=0 --num_shards=1 --img_format=png
 
