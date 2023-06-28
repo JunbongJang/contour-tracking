@@ -74,7 +74,7 @@ To preprocess the segmentation masks
 
 ## Training
 
-First, edit src/uflow_flags.py to change hyperparameters such as learning rate and number of training steps.
+First, edit src/uflow_flags.py to change hyperparameters such as learning rate and number of training steps. Then, edit the arguments such as "train_on", "valid_on", 'height', 'width' and 'generated_dir' in the commands as current paths and settings are specified for my use case.
 
 ###### MARS-Net dataset (all 200 frames)
 >python -m src.contour_flow_main --train_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/training/ --valid_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/test4/ --height=256 --width=256 --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/ --use_tracking_points --use_seg_points --batch_size=8
