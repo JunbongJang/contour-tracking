@@ -156,8 +156,8 @@ def sample_points_between_two_endpoints(ordered_contour_points, a_image_name, da
     :return:
     '''
     # load gt points
-    gt_points_path = f"{root_assets_path}{dataset_folder}/points/{a_image_name}.txt"
-    # gt_points_path = f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/{a_image_name}.txt"
+    # gt_points_path = f"{root_assets_path}{dataset_folder}/points/{a_image_name}.txt"
+    gt_points_path = f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/{a_image_name}.txt"
     if os.path.exists(gt_points_path):
         gt_points = np.loadtxt(gt_points_path)
     gt_points = gt_points.astype('int32')
@@ -437,7 +437,7 @@ def save_sampled_tracking_points(contour_points, a_image_name, dataset_folder, s
 
 def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, image_format):
     '''
-    Given a mask, sample contour points along the mask contour
+    Given a mask, get ordered contour points along the boundary of the segmentation mask, 
     '''
 
     def plot_points(a_img, ordered_contour_points, unit_normal_list, dataset_folder, save_folder, filename):
@@ -577,6 +577,10 @@ def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, i
 
 
 def convert_GT_tracking_points_to_contour_indices(dataset_folder):
+    '''
+    Convert the ground truth tracking points in x and y coordinates to contour indices along the boundary of the segmentation mask
+    '''
+    
     contour_points_path_list = glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt")
 
     # ------------------------------------------------------------------------
@@ -868,32 +872,32 @@ if __name__ == "__main__":
     for dataset_folder in dataset_folders:
         print('dataset', dataset_folder)
         # --------------------------- Data preprocessing --------------------------------------
-        # sample_contour_points(dataset_folder, image_folder, processed_mask_folder, image_format)
-        # convert_GT_tracking_points_to_contour_indices(dataset_folder)
+        sample_contour_points(dataset_folder, image_folder, processed_mask_folder, image_format)
+        convert_GT_tracking_points_to_contour_indices(dataset_folder)
 
-        # --------------------------- Data Loading --------------------------------------------
-        Matlab_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt")
-        my_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/points/*.txt")  # my manual GT points
+        # --------------------------- Data Loading for manuscript drawing --------------------------------------------
+        # Matlab_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt")
+        # my_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/points/*.txt")  # my manual GT points
         
-        pred_tracking_points_np = np.load(f"{root_generated_path}{dataset_folder}/saved_tracking_points.npy", allow_pickle=True)
-        pred_tracking_points_contour_indices = np.load(f"{root_generated_path}{dataset_folder}/tracked_contour_points.npy", allow_pickle=True)
+        # pred_tracking_points_np = np.load(f"{root_generated_path}{dataset_folder}/saved_tracking_points.npy", allow_pickle=True)
+        # pred_tracking_points_contour_indices = np.load(f"{root_generated_path}{dataset_folder}/tracked_contour_points.npy", allow_pickle=True)
         
-        contour_points_path_list = glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt")
-        img_path_list = glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}")
+        # contour_points_path_list = glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt")
+        # img_path_list = glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}")
         
-        if len(contour_points_path_list) == 200:
-            contour_points_path_list = [contour_points_path_list[0]] + contour_points_path_list[4::5]
-            assert pred_tracking_points_contour_indices.shape[0] == 40
-            assert pred_tracking_points_np.shape[0] == 40
-            assert len(Matlab_GT_tracking_points_path_list) == len(contour_points_path_list)
-            assert len(Matlab_GT_tracking_points_path_list) == len(my_GT_tracking_points_path_list)
-            assert len(my_GT_tracking_points_path_list) == 41
-        if  len(contour_points_path_list) == 199:
-            contour_points_path_list = [contour_points_path_list[0]] + contour_points_path_list[4::5]
-        if len(contour_points_path_list) == 40 and pred_tracking_points_contour_indices.shape[0] == 40:
-            pred_tracking_points_contour_indices = pred_tracking_points_contour_indices[:-1]
-        assert len(img_path_list) == len(contour_points_path_list)
-        assert len(img_path_list) == pred_tracking_points_contour_indices.shape[0] + 1
+        # if len(contour_points_path_list) == 200:
+        #     contour_points_path_list = [contour_points_path_list[0]] + contour_points_path_list[4::5]
+        #     assert pred_tracking_points_contour_indices.shape[0] == 40
+        #     assert pred_tracking_points_np.shape[0] == 40
+        #     assert len(Matlab_GT_tracking_points_path_list) == len(contour_points_path_list)
+        #     assert len(Matlab_GT_tracking_points_path_list) == len(my_GT_tracking_points_path_list)
+        #     assert len(my_GT_tracking_points_path_list) == 41
+        # if  len(contour_points_path_list) == 199:
+        #     contour_points_path_list = [contour_points_path_list[0]] + contour_points_path_list[4::5]
+        # if len(contour_points_path_list) == 40 and pred_tracking_points_contour_indices.shape[0] == 40:
+        #     pred_tracking_points_contour_indices = pred_tracking_points_contour_indices[:-1]
+        # assert len(img_path_list) == len(contour_points_path_list)
+        # assert len(img_path_list) == pred_tracking_points_contour_indices.shape[0] + 1
 
         # ---------------------------- MATLAB ---------------------
         # first dimension is column, x
@@ -920,7 +924,7 @@ if __name__ == "__main__":
         # manuscript_figure1_trajectory(root_generated_path, dataset_folder, img_path_list, contour_points_path_list, pred_tracking_points_contour_indices)
         # manuscript_figure5(root_generated_path, dataset_folder, img_path_list, contour_points_path_list, pred_tracking_points_contour_indices)
 
-        rainbow_contour_pred_only(root_generated_path, dataset_folder, img_path_list, contour_points_path_list, pred_tracking_points_contour_indices)
+        # rainbow_contour_pred_only(root_generated_path, dataset_folder, img_path_list, contour_points_path_list, pred_tracking_points_contour_indices)
 
         # --------------------------- For Rebuttal ---------------------------
         # rebuttal_error_study(root_generated_path)
