@@ -156,8 +156,8 @@ def sample_points_between_two_endpoints(ordered_contour_points, a_image_name, da
     :return:
     '''
     # load gt points
-    # gt_points_path = f"{root_assets_path}{dataset_folder}/points/{a_image_name}.txt"
-    gt_points_path = f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/{a_image_name}.txt"
+    gt_points_path = f"{root_assets_path}{dataset_folder}/points/{a_image_name}.txt"
+    # gt_points_path = f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/{a_image_name}.txt"
     if os.path.exists(gt_points_path):
         gt_points = np.loadtxt(gt_points_path)
     gt_points = gt_points.astype('int32')
@@ -437,7 +437,7 @@ def save_sampled_tracking_points(contour_points, a_image_name, dataset_folder, s
 
 def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, image_format):
     '''
-    Given a mask, sample points along the mask contour
+    Given a mask, sample contour points along the mask contour
     '''
 
     def plot_points(a_img, ordered_contour_points, unit_normal_list, dataset_folder, save_folder, filename):

@@ -51,15 +51,15 @@ Otherwise, the contour point in the current frame is incorrectly mapped to the n
 
 *This step is unnecessary if you don't want to try supervised learning with pseduo labels from MATLAB morphodynamics profiler. 
 
-3. To get ordered contour points along the boundary of the segmentation mask, run
->main_process_tracking_points.py --> sample_points()
+3. To get ordered contour points along the boundary of the segmentation mask and convert ground truth tracking points in x and y coordinates to contour indices, 
+<br> set "dataset_name" equal to either 'PC', 'HACKS', or 'JELLY' and run
+>main_process_tracking_points.py
 
-4. To convert the ground truth tracking points in x and y coordinates to contour indices along the boundary of the segmentation mask, run 
->main_process_tracking_points.py --> convert_GT_tracking_points_to_contour_indices()
+*These pre-processed results will be used as input in our model.
 
 ## Data Conversion to TFRecord
+This section is to create tfrecords comprised of images, seg_points, and tracking_points from the pre-processed results above.
 
-To create tfrecords with images + seg_points + tracking_points
 For training set
 >python -m src.data_conversion_scripts.convert_custom_to_tfrecords --data_dir=src/assets/pc_5small_sparse_matlab_seg_all_points/ --shard=0 --num_shards=1 --img_format=png
 
