@@ -462,19 +462,19 @@ if __name__ == "__main__":
     # for Phase contrast
     # 040119_PtK1_S01_01_phase, 040119_PtK1_S01_01_phase_ROI2, 040119_PtK1_S01_01_phase_2_DMSO_nd_01, 040119_PtK1_S01_01_phase_3_DMSO_nd_03
     LoadMovie(root_window, left_frame, right_frame,
-              movie_path="../../../generated/Computer Vision/Tracking/040119_PtK1_S01_01_phase/contour_points_visualize/",
-              save_path='../../../generated/Computer Vision/Tracking/040119_PtK1_S01_01_phase/points/')
+              movie_path="generated/Computer Vision/PC_live/040119_PtK1_S01_01_phase/contour_points_visualize/",
+              save_path='generated/Computer Vision/PC_live/040119_PtK1_S01_01_phase/points/')
 
     # for SDC dataset
     # 1_050818_DMSO_09, 2_052818_S02_none_08, 3_120217_S02_CK689_50uM_08, 4_122217_S02_DMSO_04, 5_120217_S02_CK689_50uM_07, 6_052818_S02_none_02, 7_120217_S02_CK689_50uM_13, 8_TFM-08122012-5, 9_052818_S02_none_12
     # LoadMovie(root_window, right_frame,
-    #           movie_path="../../../generated/Computer Vision/HACKS_live/5_120217_S02_CK689_50uM_07/contour_points_visualize/",
-    #           save_path='../../../generated/Computer Vision/HACKS_live/5_120217_S02_CK689_50uM_07/points/')
+    #           movie_path="generated/Computer Vision/HACKS_live/5_120217_S02_CK689_50uM_07/contour_points_visualize/",
+    #           save_path='generated/Computer Vision/HACKS_live/5_120217_S02_CK689_50uM_07/points/')
 
     # for jellyfish
     # LoadMovie(root_window, right_frame,
-    #           movie_path="../../../generated/Computer Vision/Jellyfish/First/contour_points_visualize/",
-    #           save_path='../../../generated/Computer Vision/Jellyfish/First/points/')
+    #           movie_path="generated/Computer Vision/Jellyfish/First/contour_points_visualize/",
+    #           save_path='generated/Computer Vision/Jellyfish/First/points/')
 
     root_window.eval('tk::PlaceWindow . center')
     root_window.mainloop()
