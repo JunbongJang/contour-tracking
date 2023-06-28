@@ -39,20 +39,23 @@ Install Python dependencies in the requirements.txt
 We recommend doing this in a local PC in Windows 10/11. <br>
 Please find the files used in this section inside the preprocessing folder.
 
-To create GT tracking points using our GUI,
+To create GT tracking points using our GUI, specify movie path and save path and run
 >tracking_points_labeling_GUI.py
+Please label contour points in the same order for every frame. For instance, label top left contour point first and label bottom right contour point at the end for every frame. 
+Otherwise, the contour point in the current frame is incorrectly mapped to the non-corresponding point in the next frame. 
 
-To create pseudo labels from the tracking results from MATLAB morphodynamics program, run
+To create pseudo labels, produce tracking results from **[MATLAB morphodynamic profiler](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1367294/)**
+<br> Then, run
 >MATLAB_tracking_points.py
 
-To sample normal points,
->process_tracking_points.py --> sample_points() --> iterative normal line sampling
+To sample normal point, run
+>process_tracking_points.py --> sample_points()
 
-To get all points along the segmentation mask
->process_tracking_points.py --> sample_points() --> simply sample all points along the contour with order
+To get all points along the segmentation mask in order, run
+>process_tracking_points.py --> sample_points()
 
-To get correspondence tracking points to segmentation mask
-Run this after MATLAB_tracking_points.py and process_tracking_points.py --> sample_points()
+To get correspondence tracking points to segmentation mask, <br>
+run this after MATLAB_tracking_points.py and process_tracking_points.py --> sample_points()
 >process_tracking_points.py --> convert_GT_tracking_points_to_contour_indices()
 
 ## Data Conversion to TFRecord
