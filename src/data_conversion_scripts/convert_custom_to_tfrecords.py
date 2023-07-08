@@ -27,13 +27,14 @@ from src.data_conversion_scripts import conversion_utils
 import cv2
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('data_dir', '', 'Dataset folder.')
+flags.DEFINE_string('data_dir', None, 'Dataset folder.')
 flags.DEFINE_string('output_dir', '', 'Location to export to.')
 flags.DEFINE_integer('shard', 0, 'Which shard this is.')
 flags.DEFINE_integer('num_shards', 100, 'How many total shards there are.')
 flags.DEFINE_integer('seq_len', 2, 'How long is the sequence?')
 flags.DEFINE_string('img_format', 'jpg', 'image format')
-flags.DEFINE_string('mode', 'dense', 'sparse or dense video frames')
+flags.DEFINE_string('mode', 'sparse', 'sparse or dense video frames')
+flags.DEFINE_string('data_split', None, 'training or test video frames')
 
 
 def get_image_name(image_path, file_format):
@@ -124,7 +125,7 @@ def create_seq_from_list(tracking_points_path_list, seq_len, data_split, mode):
     return tracking_points_seq
 
 
-def convert_dataset(seq_len, mode):
+def convert_dataset(seq_len, mode, data_split):
     """
     Convert the data to the TFRecord format.
     dataset is images and tracking points label, but no segmentation label
@@ -324,132 +325,128 @@ def convert_dataset(seq_len, mode):
     if not tf.io.gfile.exists(FLAGS.output_dir):
         tf.io.gfile.mkdir(FLAGS.output_dir)
 
-    for data_split in ['training']: # 'training', 'valid'  # 'test1', 'test2', 'test3', 'test4', 'test5', 'test6', 'test7', 'test8', 'test9'
-        print('data_split', data_split)
-        split_folder = os.path.join(FLAGS.output_dir, data_split)
-        if not tf.io.gfile.exists(split_folder):
-            tf.io.gfile.mkdir(split_folder)
+    split_folder = os.path.join(FLAGS.output_dir, data_split)
+    if not tf.io.gfile.exists(split_folder):
+        tf.io.gfile.mkdir(split_folder)
 
-        output_folder = os.path.join(FLAGS.output_dir, data_split)
-        if not tf.io.gfile.exists(output_folder):
-            tf.io.gfile.mkdir(output_folder)
+    output_folder = os.path.join(FLAGS.output_dir, data_split)
+    if not tf.io.gfile.exists(output_folder):
+        tf.io.gfile.mkdir(output_folder)
 
-        data_folder_path = os.path.join(FLAGS.data_dir, data_split)
+    data_folder_path = os.path.join(FLAGS.data_dir, data_split)
 
-        image_folders = sorted(tf.io.gfile.glob( data_folder_path + f'/*/images'))
-        seg_points_folders = sorted(tf.io.gfile.glob(data_folder_path + f'/*/contour_points'))
-        tracking_points_folders = sorted(tf.io.gfile.glob(data_folder_path + f'/*/tracked_points_in_contour_indices'))
+    image_folders = sorted(tf.io.gfile.glob( data_folder_path + f'/*/images'))
+    seg_points_folders = sorted(tf.io.gfile.glob(data_folder_path + f'/*/contour_points'))
+    tracking_points_folders = sorted(tf.io.gfile.glob(data_folder_path + f'/*/tracked_points_in_contour_indices'))
 
-        assert len(image_folders) == len(tracking_points_folders)
-        assert len(image_folders) == len(seg_points_folders)
+    assert len(image_folders) == len(tracking_points_folders)
+    assert len(image_folders) == len(seg_points_folders)
 
-        data_list = []
-        for image_folder_path, seg_points_folder_path, tracking_points_folder_path in zip(image_folders, seg_points_folders, tracking_points_folders):
-            # get image path
-            image_path_list = tf.io.gfile.glob(image_folder_path + f"/*.{FLAGS.img_format}")
-            sort_by_frame_index = lambda x: int( os.path.basename(x).split('_')[-1].split('.')[0])  # MARS-Net, Jellyfish
-            # sort_by_frame_index = lambda x: int( os.path.basename(x)[-8:].split('.')[0] )  # HACKS
-            image_path_list = sorted(image_path_list, key=sort_by_frame_index)
+    data_list = []
+    for image_folder_path, seg_points_folder_path, tracking_points_folder_path in zip(image_folders, seg_points_folders, tracking_points_folders):
+        # get image path
+        image_path_list = tf.io.gfile.glob(image_folder_path + f"/*.{FLAGS.img_format}")
+        sort_by_frame_index = lambda x: int( os.path.basename(x).split('_')[-1].split('.')[0])  # MARS-Net, Jellyfish
+        # sort_by_frame_index = lambda x: int( os.path.basename(x)[-8:].split('.')[0] )  # HACKS
+        image_path_list = sorted(image_path_list, key=sort_by_frame_index)
 
-            # get segmentation points path
-            seg_points_path_list = tf.io.gfile.glob(seg_points_folder_path + f"/*.txt")
-            seg_points_path_list = sorted(seg_points_path_list, key=sort_by_frame_index)
+        # get segmentation points path
+        seg_points_path_list = tf.io.gfile.glob(seg_points_folder_path + f"/*.txt")
+        seg_points_path_list = sorted(seg_points_path_list, key=sort_by_frame_index)
 
-            # get their names
-            image_name_list = []
-            seg_name_list = []
-            for a_image_path, cur_seg_points_path in zip(image_path_list, seg_points_path_list):
-                image_name_list.append(get_image_name(a_image_path, FLAGS.img_format))
-                seg_name_list.append(get_image_name(cur_seg_points_path, 'txt'))
+        # get their names
+        image_name_list = []
+        seg_name_list = []
+        for a_image_path, cur_seg_points_path in zip(image_path_list, seg_points_path_list):
+            image_name_list.append(get_image_name(a_image_path, FLAGS.img_format))
+            seg_name_list.append(get_image_name(cur_seg_points_path, 'txt'))
 
-            # get tracking points path
-            tracking_points_path_list = tf.io.gfile.glob(tracking_points_folder_path + '/*.txt')
-            tracking_points_path_list = sorted(tracking_points_path_list, key=sort_by_frame_index)
+        # get tracking points path
+        tracking_points_path_list = tf.io.gfile.glob(tracking_points_folder_path + '/*.txt')
+        tracking_points_path_list = sorted(tracking_points_path_list, key=sort_by_frame_index)
 
-            # --------------------------------------------------------------------------------------
-            expanded_tracking_points_path_list = []
-            # assert len(tracking_points_path_list) == 41
-            if data_split == 'test_dense' and len(tracking_points_path_list) == 41:
-                print('collect a consecutive frames for dense prediction')
-                for path_index, a_path in enumerate(tracking_points_path_list):
-                    if path_index == 0:
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                    elif path_index >= len(tracking_points_path_list)-1:
-                        expanded_tracking_points_path_list.append(a_path)
-                    else:
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                        expanded_tracking_points_path_list.append(a_path)
-                tracking_points_path_list = expanded_tracking_points_path_list
-                assert len(tracking_points_path_list) == 200
+        # --------------------------------------------------------------------------------------
+        expanded_tracking_points_path_list = []
+        # assert len(tracking_points_path_list) == 41
+        if data_split == 'test_dense' and len(tracking_points_path_list) == 41:
+            print('collect a consecutive frames for dense prediction')
+            for path_index, a_path in enumerate(tracking_points_path_list):
+                if path_index == 0:
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+                elif path_index >= len(tracking_points_path_list)-1:
+                    expanded_tracking_points_path_list.append(a_path)
+                else:
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+                    expanded_tracking_points_path_list.append(a_path)
+            tracking_points_path_list = expanded_tracking_points_path_list
+            assert len(tracking_points_path_list) == 200
 
-                selected_image_path_list = image_path_list
-                selected_seg_points_path_list = seg_points_path_list
-            else:
-                # to predict on sparse frames given 41 tracking points
-                # only select images and segmentations that has the corresponding labeled tracking points
-                selected_image_path_list = []
-                selected_seg_points_path_list = []
-                for a_contour_point_path, a_tracking_point_path in zip(seg_points_path_list, tracking_points_path_list):
-                    # get filenames of tracking points
-                    tracking_point_filename = get_image_name(a_tracking_point_path, 'txt')
-                    # query_image_name = 'img' + tracking_point_filename[-4:]  # HACKS
+            selected_image_path_list = image_path_list
+            selected_seg_points_path_list = seg_points_path_list
+        else:
+            # to predict on sparse frames given 41 tracking points
+            # only select images and segmentations that has the corresponding labeled tracking points
+            selected_image_path_list = []
+            selected_seg_points_path_list = []
+            for a_contour_point_path, a_tracking_point_path in zip(seg_points_path_list, tracking_points_path_list):
+                # get filenames of tracking points
+                tracking_point_filename = get_image_name(a_tracking_point_path, 'txt')
+                # query_image_name = 'img' + tracking_point_filename[-4:]  # HACKS
+                
+                # get images with the same filenames
+                # a_index = image_name_list.index(query_image_name)  # HACKS
+                a_index = image_name_list.index(tracking_point_filename)  # MARS-Net
+                selected_image_path_list.append(image_path_list[a_index])
 
-                    # get images with the same filenames
-                    # a_index = image_name_list.index(query_image_name)  # HACKS
-                    a_index = image_name_list.index(tracking_point_filename)  # MARS-Net
-                    selected_image_path_list.append(image_path_list[a_index])
+                a_index = seg_name_list.index(tracking_point_filename)
+                selected_seg_points_path_list.append(seg_points_path_list[a_index])
 
-                    a_index = seg_name_list.index(tracking_point_filename)
-                    selected_seg_points_path_list.append(seg_points_path_list[a_index])
+        # -------------------------------------------------------------------------------
+        new_tracking_points_seq = create_seq_from_list(tracking_points_path_list, seq_len, data_split, mode)
+        new_image_seq = create_seq_from_list(selected_image_path_list, seq_len, data_split, mode)
+        new_seg_seq = create_seq_from_list(selected_seg_points_path_list, seq_len, data_split, mode)
+        # for training with shuffled sequence
+        # assert 'training' == data_split
 
-            # -------------------------------------------------------------------------------
+        # @@@@@@@@@@ for backward tracking test set, reverse sequence
+        # assert seq_len == 2
+        # assert ('test' in data_split) == True
+        # new_tracking_points_seq[0].reverse()
+        # new_tracking_points_seq[1].reverse()
+        # new_image_seq[0].reverse()
+        # new_image_seq[1].reverse()
+        # new_seg_seq[0].reverse()
+        # new_seg_seq[1].reverse()
 
-            new_tracking_points_seq = create_seq_from_list(tracking_points_path_list, seq_len, data_split, mode)
-            new_image_seq = create_seq_from_list(selected_image_path_list, seq_len, data_split, mode)
-            new_seg_seq = create_seq_from_list(selected_seg_points_path_list, seq_len, data_split, mode)
-            # for training with shuffled sequence
-            # assert 'training' == data_split
+        # -------------------------------------------------------------------------------
+        zipped_tracking_points_seq = zip(*new_tracking_points_seq)
+        zipped_image_seq = zip(*new_image_seq)
+        zipped_seg_seq = zip(*new_seg_seq)
 
-            # @@@@@@@@@@ for backward tracking test set, reverse sequence
-            # assert seq_len == 2
-            # assert ('test' in data_split) == True
-            # new_tracking_points_seq[0].reverse()
-            # new_tracking_points_seq[1].reverse()
-            # new_image_seq[0].reverse()
-            # new_image_seq[1].reverse()
-            # new_seg_seq[0].reverse()
-            # new_seg_seq[1].reverse()
+        assert len(tracking_points_path_list) == len(selected_image_path_list)
+        assert len(tracking_points_path_list) == len(selected_seg_points_path_list)
+        assert len(new_tracking_points_seq) == seq_len
+        assert len(new_tracking_points_seq) == len(new_image_seq)
+        assert len(new_tracking_points_seq) == len(new_seg_seq)
+        assert len(new_tracking_points_seq[0]) == len(new_tracking_points_seq[1])
+        assert len(new_tracking_points_seq[0]) == len(new_image_seq[0])
+        assert len(new_tracking_points_seq[0]) == len(new_seg_seq[0])
+        assert len(new_tracking_points_seq[0]) == len(new_image_seq[1])
+        assert len(new_tracking_points_seq[0]) == len(new_seg_seq[1])
 
-            # -------------------------------------------------------------------------------
+        data_list.extend(zip(zipped_image_seq, zipped_seg_seq, zipped_tracking_points_seq))
 
-            zipped_tracking_points_seq = zip(*new_tracking_points_seq)
-            zipped_image_seq = zip(*new_image_seq)
-            zipped_seg_seq = zip(*new_seg_seq)
+    num_least_tracking_points = find_least_tracking_points(tracking_points_folders)
+    print('num_least_tracking_points', num_least_tracking_points)
 
-            assert len(tracking_points_path_list) == len(selected_image_path_list)
-            assert len(tracking_points_path_list) == len(selected_seg_points_path_list)
-            assert len(new_tracking_points_seq) == seq_len
-            assert len(new_tracking_points_seq) == len(new_image_seq)
-            assert len(new_tracking_points_seq) == len(new_seg_seq)
-            assert len(new_tracking_points_seq[0]) == len(new_tracking_points_seq[1])
-            assert len(new_tracking_points_seq[0]) == len(new_image_seq[0])
-            assert len(new_tracking_points_seq[0]) == len(new_seg_seq[0])
-            assert len(new_tracking_points_seq[0]) == len(new_image_seq[1])
-            assert len(new_tracking_points_seq[0]) == len(new_seg_seq[1])
-
-            data_list.extend(zip(zipped_image_seq, zipped_seg_seq, zipped_tracking_points_seq))
-
-        num_least_tracking_points = find_least_tracking_points(tracking_points_folders)
-        print('num_least_tracking_points', num_least_tracking_points)
-
-        CUSTOM_MAX_TOTAL_SEG_POINTS_NUM = 1640 # 1640  # 1150 # TODO
-        write_records(data_list, output_folder, num_least_tracking_points, CUSTOM_MAX_TOTAL_SEG_POINTS_NUM)
+    CUSTOM_MAX_TOTAL_SEG_POINTS_NUM = 1640 # 1640  # 1150 # TODO
+    write_records(data_list, output_folder, num_least_tracking_points, CUSTOM_MAX_TOTAL_SEG_POINTS_NUM)
 
 # ------------------------------------------------------------------------------------
 
@@ -626,8 +623,8 @@ def debug_file():
 
 def main(_):
     FLAGS.output_dir = FLAGS.data_dir + "tfrecord/"
-
-    convert_dataset(FLAGS.seq_len, mode=FLAGS.mode)
+    
+    convert_dataset(FLAGS.seq_len, FLAGS.mode, FLAGS.data_split)
     # convert_dataset_with_segmentation()
 
     print('@@@@@@@@@@@')

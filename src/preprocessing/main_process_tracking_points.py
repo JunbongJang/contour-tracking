@@ -2,8 +2,8 @@
 Author: Junbong Jang
 Date: 2/7/2022
 
-Given an input image and the label about the location of contour points from PoST dataset,
-
+It loads PC, HACKS, and Jellyfish videos, GT labels, pseudo-labels from Mechanical model, predictions from various contour tracking algorithms. 
+Then, it draws manuscript figures and evaluate models' performance by spatial and contour accuracy.
 '''
 
 import os
@@ -13,339 +13,15 @@ import matplotlib.pyplot as plt
 import pylab
 import numpy as np
 from tqdm import tqdm
-import collections
-
-import geopandas as gpd
-import shapely
-import rasterio
-from rasterio import features
-from shapely.geometry import Polygon
+import shutil
 from statistics import mean
-import metrics
 import matplotlib as mpl
 import scipy.io as sio
 import ast
 from matplotlib.colors import LinearSegmentedColormap
 
 from visualization_utils import plot_tracking_points, display_image_in_actual_size, get_image_name
-from contour_tracking_manuscript_figures import rainbow_contour_pred_only, manuscript_figure1_trajectory, manuscript_figure1, manuscript_figure4_for_jelly, manuscript_figure4, manuscript_figure4_no_GT, manuscript_figure5, rebuttal_labeling_figure, rebuttal_error_study
-
-
-def overlay_edge_over_img(img, canny_edge):
-    # overlay with the original image
-    colorful_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    colorful_canny_edge = cv2.cvtColor(canny_edge, cv2.COLOR_GRAY2RGB)
-    colorful_canny_edge[:, :, 1:2] = 0
-
-    overlaid_img = cv2.addWeighted(colorful_img, 0.5, colorful_canny_edge, 1, 0)
-
-    return overlaid_img
-
-
-def cnt2mask(cnt, size):
-    '''
-    Range of the intensity of the mask is 0 ~ 1
-    '''
-    mask = np.zeros((size[0], size[1], 3))
-    abs_cnt_np = cnt.astype('int32')
-    mask = cv2.drawContours(mask, [abs_cnt_np], -1, (1, 1, 1), cv2.FILLED)
-
-    return mask
-
-
-def mask_to_polygon(a_mask):
-    '''
-    refer to https://rocreguant.com/convert-a-mask-into-a-polygon-for-images-using-shapely-and-rasterio/1786/
-    https://rasterio.readthedocs.io/en/latest/api/rasterio.features.html#rasterio.features.shapes
-    https://rasterio.readthedocs.io/en/stable/topics/georeferencing.html
-
-    :param a_mask:
-    :return:
-    '''
-    #
-    all_polygons = []
-    for shape, value in features.shapes(a_mask.astype(np.uint8), mask=(a_mask > 0), transform=rasterio.Affine(1.0, 0, 0, 0, 1.0, 0)):
-        all_polygons.append(shapely.geometry.shape(shape))
-
-    all_polygons = gpd.GeoSeries(shapely.ops.unary_union(all_polygons))[0]
-
-    return all_polygons
-
-
-def sample_contour_points_from_mask(a_mask):
-    # This samples the most contour points to approximate the contour by a polygon
-    polygon_mask = mask_to_polygon(a_mask)
-
-    if polygon_mask.boundary.geom_type == 'LineString':
-        polygon_boundaries = polygon_mask.boundary
-    else:
-        # hueristic: get the longest boundary
-        longest_boundary_index = None
-        longest_boundary_length = 0
-        for poylgon_mask_boundary_index in range(len(polygon_mask.boundary)):
-            cur_boundary_length = polygon_mask.boundary[poylgon_mask_boundary_index].length
-            if longest_boundary_length < cur_boundary_length:
-                longest_boundary_index = poylgon_mask_boundary_index
-                longest_boundary_length = cur_boundary_length
-
-        polygon_boundaries = polygon_mask.boundary[longest_boundary_index]
-
-    # combine two columns of x and y into tuples of x and y
-    coords = np.dstack(polygon_boundaries.coords.xy)[0]
-    coords = coords.astype('int32')
-    # convert list of lists to list of tuples
-    # coords = np.dstack(polygon_boundaries.coords.xy).tolist()
-    # coords = coords[0]
-    # coords = [tuple(x) for x in coords]
-
-    return coords
-
-
-def draw_spline_along_contour(root_path, thresh_img, img_index):
-    '''
-    Refer to https://stackoverflow.com/questions/47936474/is-there-a-function-similar-to-opencv-findcontours-that-detects-curves-and-repla
-    다양한 외곽선 관련 함수 https://deep-learning-study.tistory.com/232
-    :return:
-    '''
-
-    thresh_img = thresh_img.astype('uint8') * 255
-
-    # find contours without approx
-    cnts = cv2.findContours(thresh_img, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)[-2]
-
-    # contours_image = cv2.drawContours(thresh_img, cnts, -1, (0, 0, 255), 2, cv2.LINE_AA)
-    # cv2.imwrite(f"{root_path}/contour_{img_index}.png", contours_image)
-
-    # get the max-area contour
-    cnt = sorted(cnts, key=cv2.contourArea)[-1]
-
-    # calc arclentgh
-    arclen = cv2.arcLength(cnt, True)
-
-    print('arclen', arclen)
-    print('contour area', cv2.contourArea(cnt))
-    print('isConvex', cv2.isContourConvex(cnt))
-    contour_moments = cv2.moments(cnt)
-    cx = int(contour_moments['m10'] / contour_moments['m00'])
-    cy = int(contour_moments['m01'] / contour_moments['m00'])
-    print('centroid', cx, cy)
-
-    # approx
-    eps = 0.0005
-    epsilon = arclen * eps
-    approx = cv2.approxPolyDP(cnt, epsilon, True)
-
-    # draw the result
-    canvas = thresh_img.copy()
-    if len(canvas.shape) == 2:
-        canvas = np.repeat(canvas[:, :, np.newaxis], 3, axis=2)
-
-    for pt in approx:
-        cv2.circle(canvas, (pt[0][0], pt[0][1]), 2, (0, 255, 0), -1)
-
-    canvas = cv2.drawContours(canvas, [approx], -1, (0, 0, 255), 1, cv2.LINE_AA)
-    cv2.imwrite(f"{root_path}/spline_contour_{img_index}.png", canvas)
-
-
-def sample_points_between_two_endpoints(ordered_contour_points, a_image_name, dataset_folder, NUM_SAMPLE_POINTS):
-    '''
-    Given GT cell body segmentation and GT tracking points,
-    sample points evenly along the mask contour between GT tracking points which will be used as training set for contour tracking model
-
-    TODO: there is an error that the two endpoints are not actual endpoints in the mask
-    :return:
-    '''
-    # load gt points
-    # gt_points_path = f"{root_assets_path}{dataset_folder}/points/{a_image_name}.txt"
-    gt_points_path = f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/{a_image_name}.txt"
-    if os.path.exists(gt_points_path):
-        gt_points = np.loadtxt(gt_points_path)
-    gt_points = gt_points.astype('int32')
-
-    # get the closest contour point from the GT tracking point
-    gt_contour_points = {}
-    for gt_point_index, gt_point in enumerate(gt_points):
-        min_dist = 100000
-        closest_point = []
-        closest_point_index = None  # necessary for ordering gt points
-        for point_index, a_point in enumerate(ordered_contour_points):
-            x_diff = a_point[0] - gt_point[0]
-            y_diff = a_point[1] - gt_point[1]
-            dist = (x_diff**2 + y_diff**2)**(1/2)
-            if dist < min_dist:
-                min_dist = dist
-                closest_point = a_point
-                closest_point_index = point_index
-        gt_contour_points[closest_point_index] = closest_point
-
-    # find orders among GT contour points
-    gt_ordered_contour_points = collections.OrderedDict(sorted(gt_contour_points.items()))
-
-    # sample points between two adjacent GT tracking points
-    # WARNING: potential incosistent ordered points among frames if ordered_contour_points are ordered from the middle of the contour, not the corner
-    NUM_GT_POINTS = gt_points.shape[0]
-    contour_point_indices = list(gt_ordered_contour_points.keys())
-    NUM_CONTOUR_POINTS_INTERVAL = contour_point_indices[-1] - contour_point_indices[0]
-
-    if NUM_SAMPLE_POINTS is None:
-        NUM_SAMPLE_POINTS = NUM_CONTOUR_POINTS_INTERVAL
-
-    # ------------------------------
-    # Case 1: even sampling
-    sampled_contour_indices = np.linspace(contour_point_indices[0]+1, contour_point_indices[-1], num=NUM_SAMPLE_POINTS, endpoint=False, retstep=False, dtype=None, axis=0)
-    sampled_contour_indices = np.round(sampled_contour_indices).astype(int)
-
-    # Case 2: even sampling when ordered_contour_points are ordered a bit differently
-    # contour_point_indices[1] ~ ordered_contour_points.shape[0] and 0 ~ contour_point_indices[0]
-    # sampled_contour_indices = np.linspace(contour_point_indices[1]+1, ordered_contour_points.shape[0]+contour_point_indices[0], num=NUM_SAMPLE_POINTS, endpoint=False, retstep=False, dtype=None, axis=0)
-    # sampled_contour_indices = np.round(sampled_contour_indices).astype(int)
-    # sampled_contour_indices_one = sampled_contour_indices[sampled_contour_indices < ordered_contour_points.shape[0]]
-    # sampled_contour_indices_second = sampled_contour_indices[sampled_contour_indices >= ordered_contour_points.shape[0]] - ordered_contour_points.shape[0]
-    # sampled_contour_indices = np.concatenate((sampled_contour_indices_one, sampled_contour_indices_second))
-    # ------------------------------
-
-    ordered_contour_points = np.array(ordered_contour_points)
-    sampled_contour_points = ordered_contour_points[sampled_contour_indices]
-
-    return sampled_contour_points, sampled_contour_indices
-
-
-def get_unit_normal_on_contour(a_contour, sampled_contour_indices):
-    '''
-
-    :param a_contour: represented by the piecewise straight lines or splines
-    :param sampled_contour_indices:
-    :return: unit_normal_list
-    '''
-
-    def get_unit_normal(a_contour, a_sampled_contour_index):
-        '''
-        p(s) returns an np.array of size 2. A point on the spline.
-        s + e is a different point for all s within the spline, and nonzero e.
-
-        Compute tangent by central differences. You can use a closed form tangent if you have it.
-        referred https://stackoverflow.com/questions/66676502/how-can-i-move-points-along-the-normal-vector-to-a-curve-in-python
-
-        '''
-
-        tangent_at_s = (a_contour[a_sampled_contour_index+1] - a_contour[a_sampled_contour_index-1] ) / 2
-        normal_at_s = np.array([-tangent_at_s[1], tangent_at_s[0]])
-        unit_normal_at_s = normal_at_s / np.linalg.norm(normal_at_s)
-
-        return unit_normal_at_s
-
-    unit_normal_list = []
-    for a_sampled_contour_index in sampled_contour_indices:
-        if a_sampled_contour_index is not None:
-            unit_normal_list.append( get_unit_normal(a_contour, a_sampled_contour_index) )
-        else:
-            unit_normal_list.append( None )
-
-
-    return unit_normal_list
-
-
-def get_corresponding_points_along_normal_vector(sampled_contour_points, unit_normal_list, next_ordered_contour_points):
-    '''
-
-    :param sampled_contour_points:
-    :param unit_normal_list:
-    :param next_ordered_contour_points: first index is the height, second index is the width
-    :return:
-    '''
-
-    def along_normal_point_intersect_next_ordered_contour(along_normal_point, next_ordered_contour_points):
-
-        # find potential matches
-        corresponding_point_list = []
-        corresponding_index_list = []
-        dist_list = []
-        x_comp = np.ceil(along_normal_point[0]).astype(dtype='int32')
-        y_comp = np.ceil(along_normal_point[1]).astype(dtype='int32')
-
-        corresponding_index = np.where((next_ordered_contour_points[:, 0] == x_comp) * (next_ordered_contour_points[:, 1] == y_comp))[0]
-        if len(corresponding_index) > 0:
-            corresponding_point_list.append([x_comp, y_comp])
-            corresponding_index_list.append(corresponding_index[0])
-            a_dist = (along_normal_point[0] - x_comp) ** 2 + (along_normal_point[1] - y_comp) ** 2
-            dist_list.append(a_dist)
-
-        x_comp = np.floor(along_normal_point[0]).astype(dtype='int32')
-        y_comp = np.ceil(along_normal_point[1]).astype(dtype='int32')
-        corresponding_index = np.where((next_ordered_contour_points[:, 0] == x_comp) * (next_ordered_contour_points[:, 1] == y_comp))[0]
-        if len(corresponding_index) > 0:
-            corresponding_point_list.append([x_comp, y_comp])
-            corresponding_index_list.append(corresponding_index[0])
-            a_dist = (along_normal_point[0] - x_comp) ** 2 + (along_normal_point[1] - y_comp) ** 2
-            dist_list.append(a_dist)
-
-        x_comp = np.ceil(along_normal_point[0]).astype(dtype='int32')
-        y_comp = np.floor(along_normal_point[1]).astype(dtype='int32')
-        corresponding_index = np.where((next_ordered_contour_points[:, 0] == x_comp) * (next_ordered_contour_points[:, 1] == y_comp))[0]
-        if len(corresponding_index) > 0:
-            corresponding_point_list.append([x_comp, y_comp])
-            corresponding_index_list.append(corresponding_index[0])
-            a_dist = (along_normal_point[0] - x_comp) ** 2 + (along_normal_point[1] - y_comp) ** 2
-            dist_list.append(a_dist)
-
-        x_comp = np.floor(along_normal_point[0]).astype(dtype='int32')
-        y_comp = np.floor(along_normal_point[1]).astype(dtype='int32')
-        corresponding_index = np.where((next_ordered_contour_points[:, 0] == x_comp) * (next_ordered_contour_points[:, 1] == y_comp))[0]
-        if len(corresponding_index) > 0:
-            corresponding_point_list.append([x_comp, y_comp])
-            corresponding_index_list.append(corresponding_index[0])
-            a_dist = (along_normal_point[0] - x_comp) ** 2 + (along_normal_point[1] - y_comp) ** 2
-            dist_list.append(a_dist)
-
-        # find the closest match
-        if len(corresponding_point_list) > 0:
-            min_index = 0
-            min_dist = dist_list[min_index]
-            for a_index, a_dist in enumerate(dist_list):
-                if min_dist > a_dist:
-                    min_dist = a_dist
-                    min_index = a_index
-
-            corresponding_point = corresponding_point_list[min_index]
-            corresponding_index = corresponding_index_list[min_index]
-        else:
-            corresponding_point = None
-            corresponding_index = None
-
-        return corresponding_point, corresponding_index
-
-    # ----------------------------------------------
-    corresponding_point_list = []
-    corresponding_index_list = []
-    for sampled_point_index, sampled_point in enumerate(sampled_contour_points):
-        corresponding_point = None
-        corresponding_index = None
-        if sampled_point is not None:
-            a_unit_normal = unit_normal_list[sampled_point_index]
-
-            # when dist_from_sampled_point = 0, it checks whether the sampled point did not move
-            for dist_from_sampled_point in range(10):
-                along_pos_normal_point = sampled_point + dist_from_sampled_point * a_unit_normal
-                along_neg_normal_point = sampled_point - dist_from_sampled_point * a_unit_normal
-
-                # floor, ceil the point to get 4 neighboring points
-                corresponding_point, corresponding_index = along_normal_point_intersect_next_ordered_contour(along_pos_normal_point, next_ordered_contour_points)
-                if corresponding_point is None:
-                    corresponding_point, corresponding_index = along_normal_point_intersect_next_ordered_contour(along_neg_normal_point, next_ordered_contour_points)
-
-                if corresponding_point is not None:
-                    break
-
-            if corresponding_point is None:
-                # TODO: For now, just set it to adjacent point
-                corresponding_point = corresponding_point_list[sampled_point_index-1]
-                corresponding_index = corresponding_index_list[sampled_point_index-1]
-                # raise Exception("dist_from_sampled_point is greater than 10!")
-
-        corresponding_point_list.append(corresponding_point)
-        corresponding_index_list.append(corresponding_index)
-    print( 'number of None', corresponding_point_list.count(None) )
-    return corresponding_point_list, corresponding_index_list
+from contour_tracking_manuscript_figures import rainbow_contour_pred_only, manuscript_figure1_trajectory, manuscript_figure1, manuscript_figure4_for_jelly, manuscript_figure4, manuscript_figure4_no_GT, manuscript_figure5
 
 
 def get_ordered_contour_points_from_mask(a_mask):
@@ -357,18 +33,6 @@ def get_ordered_contour_points_from_mask(a_mask):
 
     return ordered_contour_points
 
-
-def find_uturn_index(ordered_contour_points):
-    uturn_index = None
-
-    for point_index in range(ordered_contour_points.shape[0]-2):
-        if (ordered_contour_points[point_index,:] == ordered_contour_points[point_index+2,:]).all():
-            uturn_index = point_index + 1
-
-    # assert uturn_index is not None
-    print('uturn_index', uturn_index)
-
-    return uturn_index
 
 def remove_points_touching_image_boundary(ordered_contour_points, a_image):
     remove_point_indices = []
@@ -435,7 +99,7 @@ def save_sampled_tracking_points(contour_points, a_image_name, dataset_folder, s
         f.write(save_string)
 
 
-def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, image_format):
+def sample_contour_points(root_assets_path, dataset_folder, image_folder, processed_mask_folder, image_format):
     '''
     Given a mask, get ordered contour points along the boundary of the segmentation mask, 
     '''
@@ -458,8 +122,6 @@ def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, i
         if not os.path.exists(f"{root_generated_path}{dataset_folder}/{save_folder}"):
             os.mkdir(f"{root_generated_path}{dataset_folder}/{save_folder}")
 
-        # fig = plt.gcf()
-        # fig.set_size_inches(20, 20)
         fig.savefig(f"{root_generated_path}{dataset_folder}/{save_folder}/{filename}.png", bbox_inches="tight",
                     pad_inches=0)
         plt.close()
@@ -467,30 +129,22 @@ def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, i
     if not os.path.exists(root_generated_path + dataset_folder):
         os.mkdir(root_generated_path + dataset_folder)
 
-    mask_path_list = glob(f"{root_assets_path}/{dataset_folder}/WindowingPackage/{processed_mask_folder}/*{image_format}")
-    img_path_list = glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}")
+    mask_path_list = sorted(glob(f"{root_assets_path}/{dataset_folder}/WindowingPackage/{processed_mask_folder}/*{image_format}"))
+    img_path_list = sorted(glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}"))
 
     cm = pylab.get_cmap('gist_rainbow')
     number_of_edge_pixels_list = []
     total_num_points_list = []
     for img_index, (mask_path, img_path) in tqdm(enumerate(zip(mask_path_list, img_path_list))):
+        a_image_name = get_image_name(mask_path, image_format )
+        a_image_name = a_image_name.replace('refined_', '')
+        # a_image_name = a_image_name[-3:]
+
+        assert a_image_name == get_image_name(img_path, image_format )
 
         a_img = plt.imread(img_path)
         a_mask = plt.imread(mask_path).astype('uint8')
-        a_image_name = get_image_name(mask_path, image_format )
-        a_image_name = a_image_name.replace('refined_', '')
-        a_image_name = a_image_name[-3:]
-
-        # ------------------------
-        # sample a few points to approximate the contour by a polygon
-        # draw_spline_along_contour(root_generated_path + dataset_folder, a_mask, img_index)
-
-        # ------------------------
-        # sample the most contour points to approximate the contour by a polygon
-        # ordered_contour_points = sample_contour_points_from_mask(a_mask)
-
-        # -------------------------
-        # simply sample all points along the contour with order
+        # sample all points along the contour with order
         ordered_contour_points = get_ordered_contour_points_from_mask(a_mask)
         ordered_contour_points = reorder_contour_points(ordered_contour_points, height=a_mask.shape[0], width=a_mask.shape[1])
         processed_ordered_contour_points = remove_points_touching_image_boundary(ordered_contour_points, a_mask)
@@ -498,94 +152,40 @@ def sample_contour_points(dataset_folder, image_folder, processed_mask_folder, i
         plot_points(a_img, processed_ordered_contour_points, None, dataset_folder, save_folder='contour_points_visualize', filename=f"{a_image_name}")
         save_sampled_tracking_points(processed_ordered_contour_points, a_image_name, dataset_folder, save_folder='contour_points')
 
-        # ------------------------
-        # sampled_contour_points, sampled_contour_indices = sample_points_between_two_endpoints(ordered_contour_points, a_image_name, dataset_folder, NUM_SAMPLE_POINTS=None)  # NUM_SAMPLE_POINTS=128
-        # plot_points(a_img, sampled_contour_points, None, dataset_folder, save_folder='contour_points_visualize', filename=f"{a_image_name}")
-        # save_sampled_tracking_points(sampled_contour_points, a_image_name, dataset_folder, save_folder='contour_points')
-
-        # -------------------------
-        # iterative normal line sampling
-        # if img_index < len(mask_path_list)-1:
-        #     # sample all points along the contour with order
-        #     ordered_contour_points = get_ordered_contour_points_from_mask(a_mask)
-        #     # plot_points(a_img, ordered_contour_points, None, dataset_folder, save_folder='all_points', filename=f"{a_image_name}")
-        #
-        #     if img_index == 0:
-        #         sampled_contour_points, sampled_contour_indices = sample_points_between_two_endpoints(ordered_contour_points, a_image_name, dataset_folder, NUM_SAMPLE_POINTS=128)
-        #         save_sampled_tracking_points(sampled_contour_points, a_image_name, dataset_folder, 'sampled_normal_points')
-        #     # plot_points(a_img, sampled_contour_points, None, dataset_folder, save_folder='contour_points', filename=f"{a_image_name}")
-        #     else:
-        #         # use corresponding points from the previous iteration
-        #         sampled_contour_points = corresponding_contour_points
-        #         sampled_contour_indices = corresponding_contour_indices
-        #         # find the closest ordered contour point to the corresponding points
-        #
-        #     unit_normal_list = get_unit_normal_on_contour(ordered_contour_points, sampled_contour_indices)
-        #     # plot_points(a_img, sampled_contour_points, unit_normal_list, dataset_folder, save_folder='normal_vectors', filename=f"{a_image_name}")  # plot normal
-        #
-        #     # get next frame
-        #     next_img = plt.imread(mask_path_list[img_index+1]).astype('uint8')
-        #     next_image_name = get_image_name(mask_path_list[img_index+1], image_format )
-        #     next_ordered_contour_points = get_ordered_contour_points_from_mask(next_img)
-        #     corresponding_contour_points, corresponding_contour_indices = get_corresponding_points_along_normal_vector(sampled_contour_points, unit_normal_list, next_ordered_contour_points)
-        #     plot_points(a_img, corresponding_contour_points, None, dataset_folder, save_folder='corresponding_points', filename=f"{a_image_name}")  # plot normal
-        #
-        #     # save sampled tracking points ( synthetic training set )
-        #     save_sampled_tracking_points(corresponding_contour_points, next_image_name, dataset_folder, 'sampled_normal_points')
-
-        # -------------------
-        # sample all points along the contour without order!
-        # a_edge = cv2.Canny(a_mask * 255, 100, 200, 3, L2gradient=True)
-        # # cv2.imwrite(f"{root_generated_path}{a_image_name}.png", a_edge)
-        #
-        # # get coords of the contour points
-        # y_coords, x_coords = np.where(a_edge > 0)
-        #
-        # # assign color to each contour point in order
-        # NUM_COLORS = len(x_coords)
-        # number_of_edge_pixels_list.append(NUM_COLORS)
-        # print('Total # of edge pixels', NUM_COLORS)
-        #
-        # color_edge = np.zeros((a_edge.shape[0], a_edge.shape[1], 3), dtype=np.float64)
-        # for a_index, (x_coord, y_coord) in tqdm(enumerate(zip(x_coords, y_coords))):
-        #     color_edge[y_coord, x_coord, :] = cm(1. * a_index / NUM_COLORS)[:3]
-        # cv2.imwrite(f"{root_generated_path}{a_image_name}_contour.png", color_edge*255)
-
-        # dillation_size = 32
-        # kernel = np.ones((dillation_size, dillation_size), np.uint8)
-        # dilated_edge = cv2.dilate(a_edge, kernel, iterations=1)
-
-        # overlaid_img = overlay_edge_over_img(a_mask * 255, a_edge)
-        # cv2.imwrite(f"{root_generated_path}{a_image_name}_overlaid.png", overlaid_img)
-
-        # assign id to each pixel of the contour in order
-        # contours, _ = cv2.findContours(a_edge.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)  # find contour of the lines
-        # contours_image = cv2.drawContours(a_mask, contours, 0, (255, 0, 0), 1)
-        # cv2.imwrite(f"{root_generated_path}{a_image_name}_contour2.png", contours_image)
-
-        # print('------------------------------')
-
-    # plt.plot(number_of_edge_pixels_list)
-    # plt.xlabel("frame #")
-    # plt.ylabel("Total number of edge pixels")
-    # plt.show()
-
     total_num_points_array = np.asarray(total_num_points_list)
     total_num_point_diff_array = total_num_points_array[1:] - total_num_points_array[:-1]
     print('max contour points:', np.amax(total_num_points_array))
     print('num_point_diff max', np.amax(total_num_point_diff_array), 'min', np.amin(total_num_point_diff_array))
 
 
-def convert_GT_tracking_points_to_contour_indices(dataset_folder):
+def convert_GT_tracking_points_to_contour_indices(root_generated_path, dataset_folder):
     '''
     Convert the ground truth tracking points in x and y coordinates to contour indices along the boundary of the segmentation mask
     '''
     
-    contour_points_path_list = glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt")
+    contour_points_path_list = sorted(glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt"))
 
     # ------------------------------------------------------------------------
-    GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt")  # MATLAB pseudo-labeled GT points
-    # GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/points/*.txt")  # my manual GT points
+    # GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt")  # MATLAB pseudo-labeled GT points
+    GT_tracking_points_path_list = sorted(glob(f"{root_generated_path}{dataset_folder}/points/*.txt"))  # my manual GT points
+
+    # if there is no MATLAB pseudo-labels or manual GT labels, create dummy labels
+    if len(GT_tracking_points_path_list) == 0:
+        print('No MATLAB pseudo-labels or manual GT labels. Creating dummy labels.')
+        os.makedirs(f"{root_generated_path}{dataset_folder}/points/", exist_ok=True)
+
+        save_string = ""
+        for i in range(4):
+            # reorder row & column coordinate to x & y coordinate
+            save_string += '1 7\n'
+
+        for a_contour_point_path in contour_points_path_list:
+            a_image_name = get_image_name(a_contour_point_path, '.txt')
+            GT_tracking_points_path = f'{root_generated_path}{dataset_folder}/points/{a_image_name}.txt'
+            with open(GT_tracking_points_path, 'w') as f:
+                f.write(save_string)
+
+            GT_tracking_points_path_list.append(GT_tracking_points_path)
 
     # Make dense frames sparse
     # GT_tracking_points_path_list = [GT_tracking_points_path_list[0]] + GT_tracking_points_path_list[4::5]
@@ -630,6 +230,16 @@ def convert_GT_tracking_points_to_contour_indices(dataset_folder):
             f.write(save_string)
 
 
+def copy_paste_images_to_generated_path(root_assets_path, root_generated_path, image_folder, image_format, dataset_folder):
+    img_path_list = glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}")
+    dst_root_path = f"{root_generated_path}/{dataset_folder}/images"
+    os.makedirs(dst_root_path, exist_ok=True)
+
+    for src_img_path in img_path_list:
+        src_img_name = os.path.basename(src_img_path)
+        shutil.copy(src_img_path, f"{root_generated_path}/{dataset_folder}/images/{src_img_name}")
+    
+
 def evaluate_Matlab_tracking_points_on_my_GT_tracking_points(dataset_folder, image_folder, image_format):
     '''
     load GT points
@@ -640,10 +250,10 @@ def evaluate_Matlab_tracking_points_on_my_GT_tracking_points(dataset_folder, ima
     :return:
     '''
 
-    Matlab_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt")
-    my_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/points/*.txt")  # my manual GT points
-    contour_points_path_list = glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt")
-    img_path_list = glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}")
+    Matlab_GT_tracking_points_path_list = sorted(glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt"))
+    my_GT_tracking_points_path_list = sorted(glob(f"{root_generated_path}{dataset_folder}/points/*.txt"))  # my manual GT points
+    contour_points_path_list = sorted(glob(f"{root_generated_path}{dataset_folder}/contour_points/*.txt"))
+    img_path_list = sorted(glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}"))
 
     # Matlab_GT_tracking_points_path_list = Matlab_GT_tracking_points_path_list[:41]
     # my_GT_tracking_points_path_list = my_GT_tracking_points_path_list[:41]
@@ -836,8 +446,8 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------
     # for processing MARS-Net phase contrast dataset
     elif dataset_name == 'PC':
-        root_assets_path = 'assets/Computer Vision/PC_live/'
-        root_generated_path = "generated/Computer Vision/PC_live/"
+        root_assets_path = '/data/junbong/optical_flow/assets/data_processing_pc/'
+        root_generated_path = "/data/junbong/optical_flow/assets/data_processed_pc/"
         processed_mask_folder = 'refined_masks/refined_masks_for_channel_1'
         image_folder = 'img'
         # dataset_folders =  ['040119_PtK1_S01_01_phase', '040119_PtK1_S01_01_phase_ROI2', '040119_PtK1_S01_01_phase_2_DMSO_nd_01', "040119_PtK1_S01_01_phase_3_DMSO_nd_03"]
@@ -872,8 +482,13 @@ if __name__ == "__main__":
     for dataset_folder in dataset_folders:
         print('dataset', dataset_folder)
         # --------------------------- Data preprocessing --------------------------------------
-        sample_contour_points(dataset_folder, image_folder, processed_mask_folder, image_format)
-        convert_GT_tracking_points_to_contour_indices(dataset_folder)
+        copy_paste_images_to_generated_path(root_assets_path, root_generated_path, image_folder, image_format, dataset_folder)
+        sample_contour_points(root_assets_path, dataset_folder, image_folder, processed_mask_folder, image_format)
+        convert_GT_tracking_points_to_contour_indices(root_generated_path, dataset_folder)
+
+
+
+
 
         # --------------------------- Data Loading for manuscript drawing --------------------------------------------
         # Matlab_GT_tracking_points_path_list = glob(f"{root_generated_path}{dataset_folder}/MATLAB_tracked_points/*.txt")
