@@ -38,7 +38,7 @@ flags.DEFINE_string('data_split', None, 'training or test video frames')
 
 
 def get_image_name(image_path, file_format):
-    return image_path.split('/')[-1].replace(f".{file_format}", '')
+    return os.path.basename(image_path).replace(f".{file_format}", '')
 
 
 def find_least_tracking_points(tracking_points_folders):

@@ -129,7 +129,7 @@ def sample_contour_points(root_assets_path, dataset_folder, image_folder, proces
     if not os.path.exists(root_generated_path + dataset_folder):
         os.mkdir(root_generated_path + dataset_folder)
 
-    mask_path_list = sorted(glob(f"{root_assets_path}/{dataset_folder}/WindowingPackage/{processed_mask_folder}/*{image_format}"))
+    mask_path_list = sorted(glob(f"{root_assets_path}/{dataset_folder}/{processed_mask_folder}/*{image_format}"))
     img_path_list = sorted(glob(f"{root_assets_path}/{dataset_folder}/{image_folder}/*{image_format}"))
 
     cm = pylab.get_cmap('gist_rainbow')
@@ -137,7 +137,7 @@ def sample_contour_points(root_assets_path, dataset_folder, image_folder, proces
     total_num_points_list = []
     for img_index, (mask_path, img_path) in tqdm(enumerate(zip(mask_path_list, img_path_list))):
         a_image_name = get_image_name(mask_path, image_format )
-        a_image_name = a_image_name.replace('refined_', '')
+        a_image_name = a_image_name.replace('refined_', '')  # to make the name of mask the same as the name of image
         # a_image_name = a_image_name[-3:]
 
         assert a_image_name == get_image_name(img_path, image_format )
