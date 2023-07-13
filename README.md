@@ -76,6 +76,7 @@ This section describes how to create tfrecords from the preprocessed results com
 ## Training
 
 1. Edit src/uflow_flags.py to change hyperparameters such as learning rate and number of training steps. 
+    * for instace, flags.DEFINE_integer('num_plot', 200, '') define the number of frames to visualize the predicted tracking result.
 
 2. Set arguments for "src.contour_flow_main" such as "train_on", "valid_on", 'height', 'width' and 'generated_dir' in the commands as current paths and settings are specified for my use case.
 
@@ -111,6 +112,21 @@ Below are the examples of command that I ran to train on MARS-Net, HACKS or Jell
 >python -m src.contour_flow_main --predict_on=custom:uflow/assets/pc_5small_dense_matlab_seg_all_points/tfrecord/valid/ --generated_dir=uflow/generated/pc_5small_dense_matlab_seg_all_points_match_lam3_batch8/  --use_seg_points --use_tracking_points --width=256 --height=256
 
 >python -m src.contour_flow_main --predict_on=custom:uflow/assets/HACKS_live/tfrecord/valid/ --generated_dir=uflow/generated/HACKS_live_cycle_normal_batch8/  --use_seg_points --use_tracking_points --width=512 --height=512
+
+
+After predictions, the following npy files will be generated:
+1. tracked_contour_points.npy
+  * values indicate the predicted contour point index from the current contour point index
+  * x-axis represents the contour point index
+  * y-axis represents the frame
+
+2. saved_tracking_points.npy
+  * predicted tracking results for input Ground Truth points 
+
+3. saved_pred_offset_points.npy
+  * x-axis represents x, y coordinate of the contour index points
+  * y-axis represents the frame
+
 
 ## Citation
 ```
